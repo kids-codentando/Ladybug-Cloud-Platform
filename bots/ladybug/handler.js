@@ -1058,6 +1058,20 @@ const handleMessage = async (sock, msg) => {
         return sock.sendMessage(from, { text: config.messages.botAdminNeeded }, { quoted: msg });
       }
     }
+
+    // Premium (paid) gate — owners bypass so the bot owner can always test.
+    if (command.premium && !isOwner(sender)) {
+      const premium = require('./utils/premium');
+      if (!premium.isPremium(sender)) {
+        return sock.sendMessage(from, {
+          text:
+            `⭐ *${command.name}* is a premium command.\n\n` +
+            `Unlock the full premium pack (glitch, banner, matrix, vhs, corrupt, typewriter) ` +
+            `from your Ladybug Cloud dashboard.\n\n` +
+            `Already paid? Ask the owner to activate your number.`,
+        }, { quoted: msg });
+      }
+    }
     
     // Auto-typing
     if (config.autoTyping) {
