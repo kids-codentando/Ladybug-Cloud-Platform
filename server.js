@@ -17,6 +17,7 @@ const db = require('./lib/store');
 const bots = require('./lib/bots');
 const installer = require('./lib/installer');
 const sessiongen = require('./lib/sessiongen');
+const FileSessionStore = require('./lib/session-store');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -30,16 +31,36 @@ const PRO_BOT_LIMIT = parseInt(process.env.PRO_BOT_LIMIT || '10', 10);
 app.set('trust proxy', 1);
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true }));
+// Login sessions never expire: they are stored on disk (survive restarts and
+// redeploys), the signing secret is stable, and the cookie lasts ~10 years and
+// is refreshed on every request. Users only get logged out by pressing Logout.
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
+fs.mkdirSync(DATA_DIR, { recursive: true });
+
+function sessionSecret() {
+  if (process.env.SESSION_SECRET) return process.env.SESSION_SECRET;
+  const file = path.join(DATA_DIR, '.session-secret');
+  try {
+    const existing = fs.readFileSync(file, 'utf8').trim();
+    if (existing) return existing;
+  } catch (e) { /* first boot */ }
+  const secret = crypto.randomBytes(32).toString('hex');
+  try { fs.writeFileSync(file, secret, { mode: 0o600 }); } catch (e) { console.error('[sessions] could not persist secret:', e.message); }
+  return secret;
+}
+
 app.use(
   session({
-    secret: process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex'),
+    store: new FileSessionStore(path.join(DATA_DIR, 'sessions')),
+    secret: sessionSecret(),
     resave: false,
     saveUninitialized: false,
+    rolling: true,
     cookie: {
       httpOnly: true,
       sameSite: 'lax',
       secure: process.env.NODE_ENV === 'production' && process.env.COOKIE_SECURE !== 'false',
-      maxAge: 1000 * 60 * 60 * 24 * 7,
+      maxAge: 1000 * 60 * 60 * 24 * 365 * 10,
     },
   })
 );

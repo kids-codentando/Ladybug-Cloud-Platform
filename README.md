@@ -10,7 +10,7 @@ Built by **Ntandomods** · Deployable on **Render** in one click.
 
 | Area | What you get |
 | --- | --- |
-| **Free accounts** | Public registration with bcrypt-hashed passwords and cookie sessions |
+| **Free accounts** | Public registration with bcrypt-hashed passwords and persistent, never-expiring login sessions (stored on disk, survive restarts) |
 | **Session IDs** | Each user pastes their own `Ladybug!...` session; stored per-user and injected as `SESSION_ID` |
 | **⚡ In-browser pairing** | Users generate a session themselves: enter a phone number, get an 8-digit WhatsApp pairing code, session is built automatically — no local setup |
 | **📊 Public status page** | `/status` shows live platform health, running bots, uptime and per-bot status (session IDs never exposed) |

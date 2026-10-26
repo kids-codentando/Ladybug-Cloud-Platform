@@ -27,6 +27,11 @@ async function api(path, opts = {}) {
   });
   let data = null;
   try { data = await res.json(); } catch (e) { data = {}; }
+  if (res.status === 401 && state.user && !path.startsWith('/api/auth/')) {
+    // account no longer exists server-side (e.g. data reset) - send to login cleanly
+    state.user = null;
+    location.hash = '#/login';
+  }
   if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
   return data;
 }
