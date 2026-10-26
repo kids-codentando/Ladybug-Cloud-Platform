@@ -132,6 +132,8 @@ When the bot starts:
 | Owner | `.setbotname` `.setprefix` `.broadcast` `.restart` `.update` |
 | Games | `.tictactoe` `.coinflip` `.hangman` `.slots` `.rpg` |
 | Economy | `.balance` `.daily` `.work` `.bet` `.shop` |
+| Premium ⭐ | `.glitchtext` `.banner` `.matrixrain` `.font` `.base64` `.fastdl` `.fastmp3` |
+| Prank 🎭 | `.fakecrash` `.glitchscreen` `.fakeban` `.fakescreen` `.hack` `.fakelag` `.loadingbar` |
 
 > Type `.menu` in WhatsApp to see the complete, live command list.
 
@@ -209,3 +211,31 @@ This project contains code from various open-source projects and AI tools, inclu
 
 - **Baileys** – MIT License
 - Other libraries as listed in `package.json`
+
+### 🎭 Prank pack
+
+Eight free commands that produce the "did I just break my phone?" reaction
+without breaking anything. Every one of them renders a **picture** or plays a
+short scripted gag, and every output ends with a visible `PRANK` line so the
+recipient is in on the joke.
+
+| Command | What it sends |
+|---------|---------------|
+| `.fakecrash [app]` | Android-style "App isn't responding" dialog |
+| `.glitchscreen [text]` | Corrupted / frozen screen with scanlines |
+| `.fakeban [number]` | Fake account-ban notice |
+| `.fakescreen [label]` | Loading screen stuck at 99% |
+| `.hack` | Fake hacking sequence, ends in "just kidding" |
+| `.fakelag [secs]` | Types for N seconds, then says nothing (2–12s) |
+| `.loadingbar [label]` | Progress bar that never finishes |
+| `.prankmenu` | Lists the pack |
+
+Rendering goes through `@napi-rs/canvas` (prebuilt binary, no cairo/pango
+headers needed) with `canvas` as fallback; if neither loads, the commands
+degrade to text instead of throwing.
+
+**What is deliberately absent:** payloads that freeze or crash another person's
+WhatsApp. That is a denial-of-service against a real user, it gets the bot's
+number banned within hours, and it is a criminal offence under computer-misuse
+law in most markets this bot serves. A fake screenshot gets the same laugh with
+none of the fallout.
