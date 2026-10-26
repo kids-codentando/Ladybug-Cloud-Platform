@@ -109,6 +109,28 @@ function walletHTML(b) {
         <button class="btn btn-sm btn-autoclaim" id="autoClaimBtn">Turn on auto-claim</button>
       </div>`;
   }
+  // Extra bot slot add-on ($1/month each) \u2014 stacks on the plan limit.
+  const es = b.extraSlots || {};
+  let slots;
+  if (es.active) {
+    slots = `<div class="autoclaim on">
+        <div class="autoclaim-top"><span class="dot-ok"></span><b>${es.count} extra slot${es.count > 1 ? 's' : ''} on</b>
+          <span class="autoclaim-left">renews in <span data-left="${es.until}">${fmtLeft(es.until - now)}</span></span></div>
+        <p>You can run up to <b>${es.botLimit}</b> bot${es.botLimit > 1 ? 's' : ''} at once. Add another for $${es.priceUsd}/month.</p>
+        <button class="btn btn-sm btn-autoclaim" id="slotBtn">Add another slot</button>
+      </div>`;
+  } else if (es.requested) {
+    slots = `<div class="autoclaim off pending">
+        <div class="autoclaim-top"><b>Extra bot slot</b><span class="autoclaim-left">pending</span></div>
+        <p>Request received. The admin will switch it on for you \u2014 no payment needed until then.</p>
+      </div>`;
+  } else {
+    slots = `<div class="autoclaim off">
+        <div class="autoclaim-top"><b>Extra bot slot</b><span class="autoclaim-left">$${es.priceUsd}/month</span></div>
+        <p>Running ${es.botLimit} bot${es.botLimit > 1 ? 's' : ''}? Add one more without jumping to Unlimited.</p>
+        <button class="btn btn-sm btn-autoclaim" id="slotBtn">Add a bot slot</button>
+      </div>`;
+  }
   const log = (b.log || []).map((l) => `<div class="log-row"><span>${esc(l.reason)}</span><b class="${l.delta >= 0 ? 'plus' : 'minus'}">${l.delta >= 0 ? '+' : ''}${l.delta}</b></div>`).join('');
   return `
   <div class="wallet">
@@ -123,6 +145,7 @@ function walletHTML(b) {
       <div class="coin-big"><i class="coin-dot"></i>${b.coins}<small>of ${c.maxCoins} max</small></div>
       <div class="wallet-actions">${claimBtn}${sub}</div>
       ${autoClaim}
+      ${slots}
       ${log ? `<details class="coin-log"><summary>Recent activity</summary>${log}</details>` : ''}
     </div>
   </div>`;
@@ -154,6 +177,16 @@ async function loadWallet() {
         const r = await api('/api/billing/autoclaim', { method: 'POST' });
         if (r.url) { window.open(r.url, '_blank', 'noopener'); toast('Finish the payment to switch it on.', 'ok'); }
         else toast(r.message || 'Auto-claim requested.', 'ok');
+      } catch (e) { toast(e.message, 'err'); }
+      loadWallet();
+    };
+    const slb = $('#slotBtn');
+    if (slb) slb.onclick = async () => {
+      slb.disabled = true; slb.innerHTML = '<span class="spin"></span>';
+      try {
+        const r = await api('/api/billing/slots', { method: 'POST', body: { count: 1 } });
+        if (r.url) { window.open(r.url, '_blank', 'noopener'); toast('Finish the payment to add the slot.', 'ok'); }
+        else toast(r.message || 'Slot requested.', 'ok');
       } catch (e) { toast(e.message, 'err'); }
       loadWallet();
     };
@@ -489,6 +522,13 @@ async function renderLanding() {
           <a href="#/register" class="btn btn-primary btn-block">Create free account</a>
         </div>
         <div class="plan reveal">
+          <div class="plan-name">Unlimited</div>
+          <div class="plan-price">$${price}<small>per month</small></div>
+          <p class="plan-desc">For bots you never want to think about.</p>
+          <ul><li>Runs 24/7 without coins</li><li>No daily claiming</li><li>Your coins stay in your balance</li></ul>
+          <a href="#/register" class="btn btn-block">Get started</a>
+        </div>
+        <div class="plan reveal">
           <div class="plan-name">Auto-claim <span class="plan-tag alt">New</span></div>
           <div class="plan-price">$2<small>per month</small></div>
           <p class="plan-desc">Keep the free coins, stop remembering to claim them.</p>
@@ -496,11 +536,11 @@ async function renderLanding() {
           <a href="#/register" class="btn btn-block">Start free trial</a>
         </div>
         <div class="plan reveal">
-          <div class="plan-name">Unlimited</div>
-          <div class="plan-price">$${price}<small>per month</small></div>
-          <p class="plan-desc">For bots you never want to think about.</p>
-          <ul><li>Runs 24/7 without coins</li><li>No daily claiming</li><li>Your coins stay in your balance</li></ul>
-          <a href="#/register" class="btn btn-block">Get started</a>
+          <div class="plan-name">Extra bot slot <span class="plan-tag addon">Add-on</span></div>
+          <div class="plan-price">$1<small>per month</small></div>
+          <p class="plan-desc">One more bot, without jumping to Unlimited.</p>
+          <ul><li>+1 bot slot per purchase — stack as many as you need</li><li>Works on any plan, including the free trial</li><li>Cancel by simply not renewing</li></ul>
+          <a href="#/register" class="btn btn-block">Start free trial</a>
         </div>
       </div>
     </div>
@@ -513,6 +553,7 @@ async function renderLanding() {
         <details><summary>What happens when my trial ends?</summary><p>Your bot keeps running as long as you have coins or a subscription. Each day of hosting costs 20 coins, which is exactly what one daily claim gives you.</p></details>
         <details><summary>What if I forget to claim?</summary><p>If your balance cannot cover the next day, the bot pauses and shows a notice on your dashboard. Claim your coins and press Start to bring it back. Your settings and session stay saved.</p></details>
         <details><summary>What is auto-claim?</summary><p>A $2/month add-on that claims your free coins for you. You still pay for hosting in coins, but you never have to remember the daily tap — so a busy day can't pause your bot. If you already pay for Unlimited, auto-claim is pointless and the dashboard will tell you so.</p></details>
+        <details><summary>How do I run two bots?</summary><p>Each extra bot slot is $1/month and stacks on whatever plan you are on, including the free trial. Buy as many as you need from your dashboard — they all renew together and quietly expire if you stop paying, so there is nothing to cancel.</p></details>
         <details><summary>Can I stack coins?</summary><p>Yes, up to 140. That is a week of hosting if you want to claim less often.</p></details>
         <details><summary>How do I pay the $${price} a month?</summary><p>Use the Subscribe button on your dashboard. Once your payment is confirmed, your account switches to Unlimited.</p></details>
         <details><summary>Is it safe to use with my WhatsApp?</summary><p>The bot runs as a linked device, like WhatsApp Web. Your chats stay on WhatsApp and session IDs are never shown publicly. Still follow WhatsApp's rules: don't spam groups or blast random numbers.</p></details>
@@ -1188,6 +1229,7 @@ async function adminUsers(el) {
                   <button class="btn btn-sm btn-green" data-ugrant="${u.id}" data-body='{"grantSubscriptionDays":30}' title="Mark as paid: +30 days">+30d sub</button>
                   <button class="btn btn-sm" data-ugrant="${u.id}" data-body='{"grantCoins":20}' title="Give 20 coins">+20 coins</button>
                   <button class="btn btn-sm" data-ugrant="${u.id}" data-body='{"grantAutoClaimDays":30}' title="Grant 30 days of auto-claim">+auto-claim</button>
+                  <button class="btn btn-sm" data-ugrant="${u.id}" data-body='{"grantSlotDays":30,"grantSlots":1}' title="Grant 1 extra bot slot for 30 days">+slot</button>
                   ${u.id !== state.user.id ? `<button class="btn btn-sm btn-danger" data-udel="${u.id}">Delete</button>` : ''}
                 </td>
               </tr>`).join('')}

@@ -82,7 +82,7 @@ function publicUser(u) {
     email: u.email,
     plan: u.plan || 'free',
     isAdmin: !!u.isAdmin,
-    botLimit: u.botLimit || (u.plan === 'pro' ? PRO_BOT_LIMIT : FREE_BOT_LIMIT),
+    botLimit: billing.botLimitFor(u),
     createdAt: u.createdAt,
     lastLogin: u.lastLogin || null,
     billingMode: billing.mode(u),
@@ -90,6 +90,8 @@ function publicUser(u) {
     subscriptionUntil: u.subscriptionUntil || null,
     coins: u.coins || 0,
     autoClaimUntil: u.autoClaimUntil || null,
+    extraSlots: billing.extraSlotCount(u),
+    extraSlotsUntil: u.extraSlotsUntil || null,
   };
 }
 
@@ -264,18 +266,56 @@ app.post('/api/billing/autoclaim', requireAuth, (req, res) => {
   });
 });
 
+// Extra bot slot add-on ($1/month each): stacks on top of the plan limit.
+app.post('/api/billing/slots', requireAuth, (req, res) => {
+  const b = billing.summary(req.user);
+  const want = Math.max(1, Math.min(5, parseInt(req.body && req.body.count, 10) || 1));
+  if (!billing.cfg.slotPaymentUrl) {
+    // No checkout configured: record the intent so the admin can see it.
+    if (req.user.slotRequestedAt) {
+      return res.status(409).json({
+        error: 'Your slot request is already pending. The admin will activate it shortly.',
+        billing: b,
+      });
+    }
+    req.user.slotRequestedAt = Date.now();
+    req.user.slotRequestedCount = want;
+    db.save();
+    return res.json({
+      ok: true,
+      manual: true,
+      message:
+        `An extra bot slot costs $${billing.cfg.slotPriceUsd}/month. ` +
+        'Your request has been recorded - the admin will activate it for you.',
+      billing: billing.summary(req.user),
+    });
+  }
+  const url = billing.cfg.slotPaymentUrl;
+  res.json({
+    ok: true,
+    url:
+      `${url}${url.includes('?') ? '&' : '?'}plan=slot&qty=${want}` +
+      `&client_reference_id=${encodeURIComponent(req.user.username)}`,
+  });
+});
+
 // ---------------------------------------------------------------- user bots
 app.get('/api/bots', requireAuth, (req, res) => {
   const list = db.botsForUser(req.user.id).map(botView);
-  res.json({ bots: list, limit: req.user.botLimit || FREE_BOT_LIMIT });
+  res.json({ bots: list, limit: billing.botLimitFor(req.user) });
 });
 
 app.post('/api/bots', requireAuth, (req, res) => {
   const { name, sessionId } = req.body || {};
   const owned = db.botsForUser(req.user.id);
-  const limit = req.user.botLimit || FREE_BOT_LIMIT;
+  const limit = billing.botLimitFor(req.user);
   if (owned.length >= limit) {
-    return res.status(403).json({ error: `Bot limit reached (${limit}). Upgrade your plan or contact the admin.` });
+    return res.status(403).json({
+      error:
+        `Bot limit reached (${limit}). Add an extra slot for $${billing.cfg.slotPriceUsd}/month, ` +
+        'upgrade to Unlimited, or contact the admin.',
+      limit,
+    });
   }
   if (!name || !String(name).trim()) return res.status(400).json({ error: 'Bot name is required' });
   if (!sessionId || !String(sessionId).trim()) return res.status(400).json({ error: 'Session ID is required' });
@@ -514,6 +554,21 @@ app.patch('/api/admin/users/:id', requireAdmin, (req, res) => {
     const days = req.body.grantAutoClaimDays;
     patch.autoClaimUntil = days <= 0 ? null : billing.grantAutoClaim(u, days);
     patch.autoClaimRequestedAt = null;
+  }
+  if (typeof req.body.grantSlotDays === 'number') {
+    const days = req.body.grantSlotDays;
+    const count = Math.max(1, Math.min(10, Math.round(req.body.grantSlots || 1)));
+    if (days <= 0) {
+      billing.grantExtraSlots(u, 0, 0);
+      patch.extraSlots = 0;
+      patch.extraSlotsUntil = null;
+    } else {
+      const r = billing.grantExtraSlots(u, count, days);
+      patch.extraSlots = r.slots;
+      patch.extraSlotsUntil = r.until;
+    }
+    patch.slotRequestedAt = null;
+    patch.slotRequestedCount = null;
   }
   if (typeof req.body.extendTrialDays === 'number') {
     const base = u.trialEndsAt && u.trialEndsAt > Date.now() ? u.trialEndsAt : Date.now();
