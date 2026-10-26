@@ -64,36 +64,36 @@ function walletHTML(b) {
   if (b.mode === 'admin') {
     planTitle = 'Admin'; planSub = 'Unlimited hosting, no coins needed.'; pct = 100;
   } else if (b.mode === 'subscription') {
-    planTitle = `Subscribed · $${c.priceUsd}/month`;
+    planTitle = `Unlimited`;
     planSub = `Active for <b data-left="${b.subscriptionUntil}">${fmtLeft(b.subscriptionUntil - now)}</b>. Your bot runs without spending coins.`;
     pct = Math.min(100, ((b.subscriptionUntil - now) / (c.subscriptionDays * 86400000)) * 100);
   } else if (b.mode === 'trial') {
-    planTitle = `Free trial · ${c.trialDays} days`;
+    planTitle = `Free trial`;
     planSub = `<b data-left="${b.trialEndsAt}">${fmtLeft(b.trialEndsAt - now)}</b> left. After that a bot costs ${c.botCoinCost} coins ${c.botPeriodDays === 1 ? 'per day' : 'per ' + c.botPeriodDays + ' days'}, or subscribe for $${c.priceUsd}/month.`;
     pct = Math.max(0, Math.min(100, ((b.trialEndsAt - now) / (c.trialDays * 86400000)) * 100));
   } else {
-    planTitle = 'Coin plan';
+    planTitle = 'Daily coins';
     planSub = `Your bot costs <b>${c.botCoinCost} coins</b> ${c.botPeriodDays === 1 ? 'per day' : 'per ' + c.botPeriodDays + ' days'}. Claim ${c.claimCoins} free coins every day to keep it online, or subscribe for $${c.priceUsd}/month.`;
     pct = Math.min(100, (b.coins / c.botCoinCost) * 100); tone = b.coins >= c.botCoinCost ? 'ok' : 'warn';
   }
   const claimBtn = b.canClaim
-    ? `<button class="btn btn-primary btn-claim" id="claimBtn">🪙 Claim ${c.claimCoins} free coins</button>`
-    : `<button class="btn btn-claim" disabled id="claimBtn">Next claim in <span data-left="${b.nextClaimAt}">${fmtLeft(b.nextClaimAt - now)}</span></button>`;
+    ? `<button class="btn btn-primary btn-claim" id="claimBtn">Claim ${c.claimCoins} free coins</button>`
+    : `<button class="btn btn-claim" disabled id="claimBtn">Next claim in&nbsp;<span data-left="${b.nextClaimAt}">${fmtLeft(b.nextClaimAt - now)}</span></button>`;
   const sub = b.mode === 'subscription' || b.mode === 'admin' ? '' : (c.paymentUrl
-    ? `<a class="btn" href="${esc(c.paymentUrl)}${c.paymentUrl.includes('?') ? '&' : '?'}client_reference_id=${encodeURIComponent(state.user.username)}" target="_blank" rel="noopener">⭐ Subscribe · $${c.priceUsd}/mo</a>`
-    : `<button class="btn" id="subBtn">⭐ Subscribe · $${c.priceUsd}/mo</button>`);
+    ? `<a class="btn" href="${esc(c.paymentUrl)}${c.paymentUrl.includes('?') ? '&' : '?'}client_reference_id=${encodeURIComponent(state.user.username)}" target="_blank" rel="noopener">Subscribe for $${c.priceUsd}/month</a>`
+    : `<button class="btn" id="subBtn">Subscribe for $${c.priceUsd}/month</button>`);
   const log = (b.log || []).map((l) => `<div class="log-row"><span>${esc(l.reason)}</span><b class="${l.delta >= 0 ? 'plus' : 'minus'}">${l.delta >= 0 ? '+' : ''}${l.delta}</b></div>`).join('');
   return `
   <div class="wallet">
     <div class="wallet-plan">
-      <div class="k">Your plan</div>
+      <div class="k">Plan</div>
       <div class="wallet-title">${planTitle}</div>
       <div class="wallet-sub">${planSub}</div>
       <div class="meter ${tone}"><span style="width:${pct}%"></span></div>
     </div>
     <div class="wallet-coins">
-      <div class="k">Coin balance</div>
-      <div class="coin-big"><span class="coin">🪙</span>${b.coins}<small> / ${c.maxCoins}</small></div>
+      <div class="k">Coins</div>
+      <div class="coin-big"><i class="coin-dot"></i>${b.coins}<small>of ${c.maxCoins} max</small></div>
       <div class="wallet-actions">${claimBtn}${sub}</div>
       ${log ? `<details class="coin-log"><summary>Recent activity</summary>${log}</details>` : ''}
     </div>
@@ -113,7 +113,7 @@ async function loadWallet() {
       cb.disabled = true; cb.innerHTML = '<span class="spin"></span>';
       try {
         const r = await api('/api/coins/claim', { method: 'POST' });
-        toast(`+${r.added} coins claimed! 🪙`);
+        toast(`+${r.added} coins claimed`);
       } catch (e) { toast(e.message, 'err'); }
       loadWallet();
     };
@@ -123,8 +123,8 @@ async function loadWallet() {
 }
 
 function renderNavCoins() {
-  const chip = $('#navCoins');
-  if (chip && state.billing) chip.textContent = `🪙 ${state.billing.coins}`;
+  const n = $('#navCoinsN');
+  if (n && state.billing) n.textContent = state.billing.coins;
 }
 
 // live countdowns
@@ -137,6 +137,7 @@ setInterval(() => {
 /* ---------------------------------------------------------------- router */
 const routes = {
   '/': renderLanding,
+  '/pricing': renderLanding,
   '/login': renderLogin,
   '/register': renderRegister,
   '/dashboard': renderDashboard,
@@ -159,88 +160,131 @@ async function navigate() {
 
   const fn = routes[path] || renderLanding;
   await fn();
-  window.scrollTo(0, 0);
+  if (path === '/pricing' && $('#pricing')) $('#pricing').scrollIntoView();
+  else window.scrollTo(0, 0);
 }
 
 function renderNav() {
   const el = $('#navLinks');
   if (state.user) {
+    const coins = state.billing ? state.billing.coins : state.user.coins || 0;
     el.innerHTML = `
-      <a href="#/dashboard" class="btn btn-ghost btn-sm">Dashboard</a>
-      <a href="#/status" class="btn btn-ghost btn-sm">Status</a>
-      ${state.user.isAdmin ? '<a href="#/admin" class="btn btn-ghost btn-sm">Admin</a>' : ''}
-      <a href="#/dashboard" class="coin-chip" id="navCoins" title="Your coins">🪙 ${state.billing ? state.billing.coins : state.user.coins || 0}</a>
-      <span class="btn btn-ghost btn-sm hide-sm" style="cursor:default">👤 ${esc(state.user.username)}</span>
-      <button class="btn btn-sm" id="logoutBtn">Logout</button>`;
+      <a href="#/dashboard" class="nav-link hide-sm">Dashboard</a>
+      <a href="#/status" class="nav-link hide-sm">Status</a>
+      ${state.user.isAdmin ? '<a href="#/admin" class="nav-link hide-sm">Admin</a>' : ''}
+      <span class="nav-sep hide-sm"></span>
+      <a href="#/dashboard" class="coin-chip" id="navCoins" title="Your coins"><i class="coin-dot"></i><span id="navCoinsN">${coins}</span></a>
+      <button class="btn btn-sm btn-ghost" id="logoutBtn" title="Signed in as ${esc(state.user.username)}">Log out</button>`;
     $('#logoutBtn').onclick = async () => {
       await api('/api/auth/logout', { method: 'POST' });
+      state.billing = null;
       toast('Logged out');
       location.hash = '#/';
     };
   } else {
     el.innerHTML = `
-      <a href="#/status" class="btn btn-ghost btn-sm">Status</a>
-      <a href="#/login" class="btn btn-ghost btn-sm">Login</a>
-      <a href="#/register" class="btn btn-primary btn-sm">Get Started Free</a>`;
+      <a href="#/pricing" class="nav-link hide-sm">Pricing</a>
+      <a href="#/status" class="nav-link hide-sm">Status</a>
+      <a href="#/login" class="nav-link">Log in</a>
+      <a href="#/register" class="btn btn-primary btn-sm">Start free trial</a>`;
   }
 }
 
 /* ---------------------------------------------------------------- landing */
 async function renderLanding() {
+  const price = 3;
   $('#view').innerHTML = `
   <section class="hero">
-    <div class="wrap">
-      <img src="/img/logo.png" class="hero-logo" alt="Ladybug Mini" />
-      <div class="pill"><span class="dot"></span> 7 days free · then free forever with daily coins</div>
-      <h1 class="hero-title">Host your <span class="grad">Ladybug Mini</span><br/>WhatsApp bot in seconds</h1>
-      <p class="lead">Create a free account, link your WhatsApp number, and we run your bot 24/7 in the cloud. <b>Your first 7 days are free</b>, then keep it online by claiming 20 free coins a day - or go unlimited for $3/month.</p>
-      <div class="hero-cta">
-        <a href="#/register" class="btn btn-primary">Create Free Account →</a>
-        <a href="#/login" class="btn">I already have an account</a>
+    <div class="wrap hero-grid">
+      <div>
+        <h1>Your WhatsApp bot, online in two minutes.</h1>
+        <p class="lead">Link your number, press start, and Ladybug Cloud keeps your bot running around the clock. <b>The first 7 days are free.</b> After that, claim 20 coins a day to stay online at no cost, or pay $${price} a month and forget about it.</p>
+        <div class="hero-cta">
+          <a href="#/register" class="btn btn-primary btn-lg">Start your free trial</a>
+          <a href="#/pricing" class="btn btn-lg">See pricing</a>
+        </div>
+        <p class="hero-note">No card needed. One bot per account.</p>
+      </div>
+
+      <div class="botwin" aria-hidden="true">
+        <div class="botwin-bar">
+          <div class="botwin-spots"><i></i><i></i><i></i></div>
+          <div class="botwin-title">ladybug-mini</div>
+          <span class="badge badge-starting" id="demoBadge">Starting</span>
+        </div>
+        <div class="botwin-body">
+          <div class="botwin-stats">
+            <div><span>Uptime</span><b id="demoUp">0m</b></div>
+            <div><span>Restarts</span><b>0</b></div>
+            <div><span>Plan</span><b>Trial</b></div>
+          </div>
+          <div class="botwin-log" id="demoLog"></div>
+        </div>
+        <div class="botwin-foot">
+          <span>Trial ends in <b>7 days</b></span>
+          <span>Balance <b><i class="coin-dot"></i> 20</b></span>
+        </div>
       </div>
     </div>
   </section>
 
   <section class="section">
-    <div class="wrap">
-      <div class="section-title">
-        <h2>Everything you need to run bots</h2>
-        <p>Built for the Ladybug Mini bot — simple, fast and free.</p>
+    <div class="wrap section-split">
+      <div class="section-head">
+        <h2>Online in three steps</h2>
+        <p>No server, no terminal, no config files.</p>
       </div>
-      <div class="grid grid-3">
-        <div class="card"><span class="ico">🚀</span><h3>Deploy in seconds</h3><p>Paste your session ID and hit start. Your bot connects to WhatsApp instantly — no setup headaches.</p></div>
-        <div class="card"><span class="ico">🆓</span><h3>Free accounts</h3><p>Sign up in under a minute with just a username and password. Your first 7 days are free, and daily coins keep you free after that.</p></div>
-        <div class="card"><span class="ico">📊</span><h3>Live logs</h3><p>Watch your bot's console in real time. See exactly what's happening and debug fast.</p></div>
-        <div class="card"><span class="ico">♻️</span><h3>Auto-restart</h3><p>If your bot crashes, we bring it back automatically with smart backoff — up to 5 retries.</p></div>
-        <div class="card"><span class="ico">🔐</span><h3>Private sessions</h3><p>Every bot runs in its own isolated process and session folder. Your data stays yours.</p></div>
-        <div class="card"><span class="ico">🛠️</span><h3>Admin managed</h3><p>Bot code is installed and updated by the admin, so you always run the latest Ladybug Mini.</p></div>
+      <ol class="steps">
+        <li><div><h3>Link your WhatsApp number</h3><p>Enter your phone number and we show an 8-digit code. Type it into WhatsApp under Linked devices. Already have a Ladybug session ID? Paste it instead.</p></div></li>
+        <li><div><h3>Press Start</h3><p>Your bot gets its own private process and connects in seconds. Watch the live log to see exactly what it is doing.</p></div></li>
+        <li><div><h3>Keep it running</h3><p>Claim 20 free coins each day, which covers a bot for 24 hours. Prefer not to think about it? Subscribe and the bot runs without using coins.</p></div></li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap section-split">
+      <div class="section-head">
+        <h2>What you get</h2>
+        <p>Everything needed to run Ladybug Mini reliably.</p>
       </div>
+      <dl class="deflist">
+        <div><dt>Pairing in the browser</dt><dd>Generate a session without installing anything on your computer.</dd></div>
+        <div><dt>Live logs</dt><dd>Your bot's console streams into the dashboard, so problems are easy to spot and fix.</dd></div>
+        <div><dt>Automatic restarts</dt><dd>If the bot crashes, it comes back on its own with a growing delay between attempts.</dd></div>
+        <div><dt>Private by default</dt><dd>Every bot runs in its own process with its own session folder. Session IDs are never shown publicly.</dd></div>
+        <div><dt>Always the latest bot</dt><dd>The bot code is maintained centrally, so you do not update anything yourself.</dd></div>
+        <div><dt>Public status page</dt><dd>See platform health and uptime at a glance on the <a href="#/status" style="text-decoration:underline">status page</a>.</dd></div>
+      </dl>
     </div>
   </section>
 
   <section class="section" id="pricing">
     <div class="wrap">
-      <div class="section-title"><h2>Simple pricing</h2><p>Start free. Stay free if you show up daily. Pay $3 if you'd rather not.</p></div>
-      <div class="grid grid-3 pricing">
-        <div class="card price-card">
-          <div class="price-tag">Step 1</div>
-          <h3>Free trial</h3>
-          <div class="price">$0<small> / 7 days</small></div>
-          <ul><li>1 bot, fully hosted</li><li>Live logs &amp; auto-restart</li><li>No card needed</li></ul>
-          <a href="#/register" class="btn btn-block">Start free</a>
+      <div class="section-title">
+        <h2>Pricing that starts at zero</h2>
+        <p>Try it free for a week. After that, pick whichever way suits you.</p>
+      </div>
+      <div class="pricing">
+        <div class="plan">
+          <div class="plan-name">Free trial</div>
+          <div class="plan-price">$0<small>for 7 days</small></div>
+          <p class="plan-desc">Everything works from day one. No card required.</p>
+          <ul><li>1 bot, hosted for you</li><li>Live logs and auto-restart</li><li>Browser pairing</li></ul>
+          <a href="#/register" class="btn btn-block">Start free trial</a>
         </div>
-        <div class="card price-card featured">
-          <div class="price-tag hot">Free forever</div>
-          <h3>Daily coins</h3>
-          <div class="price">🪙 20<small> / day, free</small></div>
-          <ul><li>Claim 20 coins every day</li><li>20 coins keep 1 bot online</li><li>Miss a day? Bot pauses until you claim</li></ul>
+        <div class="plan featured">
+          <div class="plan-name">Daily coins <span class="plan-tag">Stays free</span></div>
+          <div class="plan-price">20<small>coins a day, free</small></div>
+          <p class="plan-desc">Claim once a day. 20 coins keeps one bot online for 24 hours.</p>
+          <ul><li>Claim every 24 hours</li><li>Balance holds up to 140 coins</li><li>If coins run out, the bot pauses and nothing is deleted</li></ul>
           <a href="#/register" class="btn btn-primary btn-block">Create free account</a>
         </div>
-        <div class="card price-card">
-          <div class="price-tag">No fuss</div>
-          <h3>Unlimited</h3>
-          <div class="price">$3<small> / month</small></div>
-          <ul><li>Bot runs 24/7, no coins</li><li>No daily claiming</li><li>Cancel any time</li></ul>
+        <div class="plan">
+          <div class="plan-name">Unlimited</div>
+          <div class="plan-price">$${price}<small>per month</small></div>
+          <p class="plan-desc">For bots you never want to think about.</p>
+          <ul><li>Runs 24/7 without coins</li><li>No daily claiming</li><li>Your coins stay in your balance</li></ul>
           <a href="#/register" class="btn btn-block">Get started</a>
         </div>
       </div>
@@ -248,23 +292,61 @@ async function renderLanding() {
   </section>
 
   <section class="section">
+    <div class="wrap section-split">
+      <div class="section-head"><h2>Questions</h2><p>The short answers.</p></div>
+      <div class="faq">
+        <details><summary>What happens when my trial ends?</summary><p>Your bot keeps running as long as you have coins or a subscription. Each day of hosting costs 20 coins, which is exactly what one daily claim gives you.</p></details>
+        <details><summary>What if I forget to claim?</summary><p>If your balance cannot cover the next day, the bot pauses and shows a notice on your dashboard. Claim your coins and press Start to bring it back. Your settings and session stay saved.</p></details>
+        <details><summary>Can I stack coins?</summary><p>Yes, up to 140. That is a week of hosting if you want to claim less often.</p></details>
+        <details><summary>How do I pay the $${price} a month?</summary><p>Use the Subscribe button on your dashboard. Once your payment is confirmed, your account switches to Unlimited.</p></details>
+        <details><summary>Will I lose my account if the site restarts?</summary><p>No. Accounts, bots, coins and logins are backed up continuously and restored automatically.</p></details>
+      </div>
+    </div>
+  </section>
+
+  <section class="cta-band">
     <div class="wrap">
-      <div class="section-title"><h2>How it works</h2><p>Three steps to a live bot.</p></div>
-      <div class="grid grid-4">
-        <div class="card"><h3>1 · Sign up</h3><p>Create your free account in seconds.</p></div>
-        <div class="card"><h3>2 · Add session</h3><p>Paste your Ladybug session ID from pairing.</p></div>
-        <div class="card"><h3>3 · Start</h3><p>Hit start and your bot goes online.</p></div>
-        <div class="card"><h3>4 · Relax</h3><p>We keep it running 24/7 for you.</p></div>
+      <div class="cta-inner">
+        <h2>Get your bot online today.</h2>
+        <a href="#/register" class="btn btn-lg">Start your free trial</a>
       </div>
     </div>
   </section>
 
   <footer class="footer">
     <div class="wrap">
-      🐞 <strong>Ladybug Cloud</strong> · Made under <strong>Ntandomods</strong><br/>
-      <span style="font-size:12px">Not affiliated with WhatsApp Inc. Use at your own risk.</span>
+      <span><b>Ladybug Cloud</b> by Ntandomods</span>
+      <span>Not affiliated with WhatsApp Inc. Use at your own risk.</span>
     </div>
   </footer>`;
+  runDemo();
+}
+
+// one-time "bot coming online" sequence in the hero window
+function runDemo() {
+  const log = $('#demoLog'); if (!log) return;
+  const lines = [
+    ['host', 'Starting ladybug-mini'],
+    ['bot', 'Session loaded'],
+    ['bot', 'Connecting to WhatsApp...'],
+    ['ok', 'Connected. 42 commands ready'],
+    ['bot', 'Listening for messages'],
+  ];
+  const t = (i) => `<span class="t">12:0${i}</span>`;
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let i = 0;
+  const step = () => {
+    if (!$('#demoLog')) return; // navigated away
+    const [kind, text] = lines[i];
+    log.insertAdjacentHTML('beforeend', `<div class="l">${t(i)}${kind === 'ok' ? `<span class="g">${text}</span>` : text}</div>`);
+    i++;
+    if (i === 4) {
+      $('#demoBadge').className = 'badge badge-running'; $('#demoBadge').textContent = 'Running';
+      $('#demoUp').textContent = '3d 4h';
+    }
+    if (i < lines.length) setTimeout(step, reduce ? 0 : 650);
+  };
+  step();
 }
 
 /* ---------------------------------------------------------------- auth */
@@ -273,25 +355,24 @@ function authForm(mode) {
   return `
   <div class="auth-wrap">
     <div class="auth-card">
-      <img src="/img/logo.png" style="width:56px;height:56px;border-radius:14px;margin-bottom:18px" alt="Ladybug"/>
-      <h2>${isLogin ? 'Welcome back' : 'Create your free account'}</h2>
-      <p class="sub">${isLogin ? 'Log in to manage your Ladybug bots.' : 'No credit card. No limits on signup.'}</p>
+      <img src="/img/logo.png" alt="Ladybug" />
+      <h2>${isLogin ? 'Welcome back' : 'Start your free trial'}</h2>
+      <p class="sub">${isLogin ? 'Log in to manage your bot.' : '7 days of hosting for one bot. No card needed.'}</p>
       <div class="alert alert-error" id="err"></div>
       <form id="authForm">
         <div class="field">
-          <label>Username</label>
-          <input class="input" name="username" autocomplete="username" required placeholder="yourname" />
+          <label for="f-user">Username</label>
+          <input class="input" id="f-user" name="username" autocomplete="username" required placeholder="yourname" />
         </div>
-        ${isLogin ? '' : `<div class="field"><label>Email <span style="text-transform:none;font-weight:400">(optional)</span></label><input class="input" name="email" type="email" placeholder="you@example.com" /></div>`}
+        ${isLogin ? '' : `<div class="field"><label for="f-mail">Email <span class="muted" style="font-weight:400">(optional)</span></label><input class="input" id="f-mail" name="email" type="email" placeholder="you@example.com" /></div>`}
         <div class="field">
-          <label>Password</label>
-          <input class="input" name="password" type="password" autocomplete="${isLogin ? 'current-password' : 'new-password'}" required placeholder="••••••••" />
-          ${isLogin ? '' : '<div class="hint">At least 6 characters.</div>'}
+          <label for="f-pass">Password</label>
+          <input class="input" id="f-pass" name="password" type="password" autocomplete="${isLogin ? 'current-password' : 'new-password'}" required placeholder="${isLogin ? 'Your password' : 'At least 6 characters'}" />
         </div>
-        <button class="btn btn-primary btn-block" type="submit" style="margin-top:8px">${isLogin ? 'Log in' : 'Create account'}</button>
+        <button class="btn btn-primary btn-block btn-lg" type="submit" style="margin-top:6px">${isLogin ? 'Log in' : 'Create account'}</button>
       </form>
-      <p style="text-align:center;margin:20px 0 0;font-size:13.5px;color:var(--muted)">
-        ${isLogin ? `New here? <a href="#/register">Create an account</a>` : `Already registered? <a href="#/login">Log in</a>`}
+      <p style="text-align:center;margin:22px 0 0;font-size:14px;color:var(--muted)">
+        ${isLogin ? `New here? <a href="#/register" style="text-decoration:underline">Create an account</a>` : `Already registered? <a href="#/login" style="text-decoration:underline">Log in</a>`}
       </p>
     </div>
   </div>`;
@@ -348,28 +429,28 @@ async function renderDashboard() {
     <div class="wrap">
       <div class="app-head">
         <div>
-          <h1>Your Bots</h1>
-          <p>Manage and monitor your Ladybug Mini instances.</p>
+          <h1>Your bot</h1>
+          <p>Start, stop and watch your Ladybug Mini.</p>
         </div>
-        <button class="btn btn-primary" id="newBotBtn">+ New Bot</button>
+        <button class="btn btn-primary" id="newBotBtn">New bot</button>
       </div>
 
       <div id="wallet"><div class="wallet skeleton"></div></div>
 
       <div class="stats-row">
-        <div class="stat"><div class="k">Total Bots</div><div class="v">${state.bots.length}<span style="font-size:15px;color:var(--muted)"> / ${state.limit}</span></div></div>
-        <div class="stat"><div class="k">Running</div><div class="v" style="color:#6ee7a0">${running}</div></div>
+        <div class="stat"><div class="k">Bots</div><div class="v">${state.bots.length}<span style="font-size:15px;color:var(--muted);font-weight:500"> of ${state.limit}</span></div></div>
+        <div class="stat"><div class="k">Running</div><div class="v" style="color:var(--ok)">${running}</div></div>
         <div class="stat"><div class="k">Stopped</div><div class="v">${state.bots.length - running}</div></div>
-        <div class="stat"><div class="k">Plan</div><div class="v" style="font-size:20px;text-transform:capitalize">${esc(state.user.billingMode === 'coins' ? 'coins' : state.user.billingMode || state.user.plan)}</div></div>
+        <div class="stat"><div class="k">Billing</div><div class="v" style="font-size:22px;text-transform:capitalize">${esc(({ trial: 'Free trial', subscription: 'Unlimited', coins: 'Daily coins', admin: 'Admin' })[state.user.billingMode] || state.user.plan)}</div></div>
       </div>
 
       <div id="botsGrid" class="grid grid-3">
         ${state.bots.length ? state.bots.map(botCard).join('') : `
           <div class="empty" style="grid-column:1/-1">
-            <div class="big">🐞</div>
-            <h3 style="margin:0 0 8px">No bots yet</h3>
-            <p style="margin:0 0 18px">Create your first Ladybug Mini bot to get started.</p>
-            <button class="btn btn-primary" onclick="openNewBot()">Create your first bot</button>
+            <img src="/img/logo.png" alt="" />
+            <h3>Set up your first bot</h3>
+            <p>Link your WhatsApp number and your bot is online in about two minutes.</p>
+            <button class="btn btn-primary btn-lg" onclick="openNewBot()">Create bot</button>
           </div>`}
       </div>
     </div>
@@ -387,30 +468,31 @@ function badge(status) {
 }
 
 function botCard(b) {
+  const paid = b.coinPaidUntil && b.coinPaidUntil > Date.now() && b.running;
   return `
   <div class="bot-card" data-id="${b.id}">
     <div class="bot-top">
       <div>
-        <div class="bot-name">🐞 ${esc(b.name)}</div>
-        <div class="bot-meta">${b.hasSession ? esc(b.sessionIdMasked) : 'no session'}</div>
+        <div class="bot-name">${esc(b.name)}</div>
+        <div class="bot-meta">${b.hasSession ? esc(b.sessionIdMasked) : 'No session linked'}</div>
       </div>
       ${badge(b.status)}
     </div>
-    <div style="font-size:12.5px;color:var(--muted);line-height:1.8">
-      ${b.running ? `⏱️ Uptime: ${b.startedAt ? timeAgo(b.startedAt).replace(' ago', '') : '—'}` : `Last: ${b.stoppedAt ? timeAgo(b.stoppedAt) : 'never started'}`}<br/>
-      ♻️ Auto-restart: ${b.autoRestart ? 'on' : 'off'} · Restarts: ${b.restarts || 0}
-      ${b.coinPaidUntil && b.coinPaidUntil > Date.now() && b.running ? `<br/>🪙 Paid for <span data-left="${b.coinPaidUntil}">${fmtLeft(b.coinPaidUntil - Date.now())}</span>` : ''}
-      ${b.suspendedReason && !b.running ? `<div class="suspended">⏸️ ${esc(b.suspendedReason)}</div>` : ''}
-      ${b.lastError ? `<div style="color:#ff8095;margin-top:6px;font-size:12px">⚠️ ${esc(b.lastError)}</div>` : ''}
+    <div class="bot-info">
+      <div><span>${b.running ? 'Uptime' : 'Last stopped'}</span><b>${b.running ? (b.startedAt ? timeAgo(b.startedAt).replace(' ago', '') : '-') : (b.stoppedAt ? timeAgo(b.stoppedAt) : 'Never started')}</b></div>
+      <div><span>Auto-restart</span><b>${b.autoRestart ? 'On' : 'Off'}${b.restarts ? ` (${b.restarts} restarts)` : ''}</b></div>
+      ${paid ? `<div><span>Coins cover</span><b data-left="${b.coinPaidUntil}">${fmtLeft(b.coinPaidUntil - Date.now())}</b></div>` : ''}
     </div>
+    ${b.suspendedReason && !b.running ? `<div class="suspended">${esc(b.suspendedReason)}</div>` : ''}
+    ${b.lastError ? `<div class="suspended" style="color:#ff8f86;background:var(--red-soft);border-color:rgba(226,59,46,.35)">${esc(b.lastError)}</div>` : ''}
     <div class="bot-actions">
       ${b.running
         ? `<button class="btn btn-sm btn-danger" data-act="stop">Stop</button>
            <button class="btn btn-sm" data-act="restart">Restart</button>`
-        : `<button class="btn btn-sm btn-green" data-act="start">Start</button>`}
+        : `<button class="btn btn-sm btn-primary" data-act="start">Start</button>`}
       <button class="btn btn-sm" data-act="logs">Logs</button>
-      <button class="btn btn-sm" data-act="edit">Edit</button>
-      <button class="btn btn-sm btn-danger" data-act="delete">Delete</button>
+      <button class="btn btn-sm btn-ghost" data-act="edit">Edit</button>
+      <button class="btn btn-sm btn-ghost btn-danger" data-act="delete">Delete</button>
     </div>
   </div>`;
 }
@@ -472,13 +554,13 @@ function openNewBot() {
     return toast(`Bot limit reached (${state.limit}). Contact the admin to upgrade.`, 'err');
   }
   openModal(`
-    <h3>Create a new bot</h3>
+    <h3>Create your bot</h3>
     <p class="sub">Pair a number in the browser, or paste an existing session ID.</p>
     <div class="alert alert-error" id="mErr"></div>
     <div class="field"><label>Bot Name</label><input class="input" id="mName" placeholder="My Ladybug" maxlength="40" /></div>
 
     <div class="pair-box">
-      <div class="pair-head">⚡ Generate a session — no setup needed</div>
+      <div class="pair-head">Link your WhatsApp number</div>
       <div class="pair-row">
         <input class="input" id="mPhone" placeholder="Phone with country code e.g. 27821234567" inputmode="numeric" />
         <button class="btn btn-primary btn-sm" id="mPair">Get code</button>
@@ -556,10 +638,10 @@ function openNewBot() {
     if (job.status === 'ready') {
       $('#mSession').value = job.sessionId;
       const who = job.me && job.me.id ? String(job.me.id).split(':')[0].split('@')[0] : job.phone;
-      out.innerHTML = `<div class="pair-ok">✅ Paired as <b>${esc(who)}</b> — session filled in below.</div>`;
+      out.innerHTML = `<div class="pair-ok">Paired as <b>${esc(who)}</b>. The session is filled in below.</div>`;
       toast('Session generated!');
     } else if (job.status === 'error') {
-      out.innerHTML = `<div class="pair-err">⚠️ ${esc(job.message || 'Pairing failed.')}</div>`;
+      out.innerHTML = `<div class="pair-err">${esc(job.message || 'Pairing failed.')}</div>`;
     } else if (job.code) {
       out.innerHTML = `
         <div class="pair-code-label">Your pairing code</div>
@@ -704,10 +786,10 @@ async function renderStatus() {
     <div class="wrap">
       <div class="status-head">
         <div>
-          <h2 style="margin-bottom:6px">Platform Status</h2>
+          <h2 style="margin-bottom:6px">Platform status</h2>
           <p class="sub" style="margin:0">Live view of Ladybug Cloud and the bots running on it.</p>
         </div>
-        <div id="statusPill" class="pill"><span class="dot"></span> Checking…</div>
+        <div id="statusPill" class="pill"><span class="dot"></span> Checking...</div>
       </div>
       <div class="stats-grid" id="statusStats"></div>
       <div class="card" style="margin-top:24px">
@@ -735,15 +817,15 @@ async function renderStatus() {
     const healthy = d.ok;
     $('#statusPill').innerHTML = `<span class="dot" style="background:${healthy ? '#22c55e' : '#ff2d55'}"></span> ${healthy ? 'All systems operational' : 'Degraded'}`;
     $('#statusStats').innerHTML = `
-      <div class="stat"><div class="stat-label">Running</div><div class="stat-value" style="color:#22c55e">${d.stats.running}</div></div>
+      <div class="stat"><div class="stat-label">Running</div><div class="stat-value" style="color:var(--ok)">${d.stats.running}</div></div>
       <div class="stat"><div class="stat-label">Total bots</div><div class="stat-value">${d.stats.bots}</div></div>
       <div class="stat"><div class="stat-label">Users</div><div class="stat-value">${d.stats.users}</div></div>
       <div class="stat"><div class="stat-label">Host uptime</div><div class="stat-value">${fmtUptime(d.uptime)}</div></div>`;
 
     const rows = (d.bots || []).map((b) => `
       <div class="status-row">
-        <div class="status-name">🐞 ${esc(b.name)}</div>
-        <div class="status-mid">${b.running ? `⏱️ up ${fmtUptime(b.uptime)}` : 'offline'}</div>
+        <div class="status-name">${esc(b.name)}</div>
+        <div class="status-mid">${b.running ? `Up ${fmtUptime(b.uptime)}` : 'Offline'}</div>
         ${badge(b.status)}
       </div>`).join('');
 
@@ -766,7 +848,7 @@ async function renderAdmin() {
     <div class="wrap">
       <div class="app-head">
         <div><h1>Admin Panel</h1><p>Manage users, bots and the bot codebase.</p></div>
-        <span class="badge badge-running">🛡️ Admin</span>
+        <span class="badge badge-running">Admin</span>
       </div>
       <div class="tabs">
         <button class="tab" data-tab="overview">Overview</button>
@@ -807,8 +889,8 @@ async function adminOverview(el) {
       <div class="grid grid-3" style="margin-top:18px">
         <div class="card"><h3>System</h3><p>Node ${esc(s.node)}<br/>${esc(s.platform)}<br/>${s.cpus} CPUs · Load ${s.loadavg.join(' / ')}</p></div>
         <div class="card"><h3>Memory</h3><p>RSS ${s.memory.rss} MB<br/>Heap ${s.memory.heap} MB</p></div>
-        <div class="card"><h3>Database backup</h3><p>${!s.backup.enabled ? '⚪ Not configured<br/><span style="font-size:12px">Set MONGODB_URI on the server to keep data across redeploys.</span>' : s.backup.ready ? `✅ MongoDB connected<br/>Last backup: ${s.backup.lastPushAt ? timeAgo(s.backup.lastPushAt) : 'pending'}${s.backup.restored ? `<br/>Restored on boot: ${s.backup.restored.users} users, ${s.backup.restored.bots} bots` : ''}` : `❌ Not connected<br/><span style="font-size:12px;color:#ff8095">${esc(s.backup.lastError || '')}</span>`}</p></div>
-        <div class="card"><h3>Bot Code</h3><p>${s.installed ? '✅ Installed' : '❌ Not installed'}<br/>Admins: ${s.admins}</p></div>
+        <div class="card"><h3>Database backup</h3><p>${!s.backup.enabled ? 'Not configured<br/><span style="font-size:12px">Set MONGODB_URI on the server to keep data across redeploys.</span>' : s.backup.ready ? `<span style="color:var(--ok)">Connected to MongoDB</span><br/>Last backup: ${s.backup.lastPushAt ? timeAgo(s.backup.lastPushAt) : 'pending'}${s.backup.restored ? `<br/>Restored on boot: ${s.backup.restored.users} users, ${s.backup.restored.bots} bots` : ''}` : `Not connected<br/><span style="font-size:12px;color:#ff8095">${esc(s.backup.lastError || '')}</span>`}</p></div>
+        <div class="card"><h3>Bot Code</h3><p>${s.installed ? 'Installed' : 'Not installed'}<br/>Admins: ${s.admins}</p></div>
       </div>`;
   } catch (e) {
     el.innerHTML = `<div class="alert alert-error show">${esc(e.message)}</div>`;
@@ -828,14 +910,14 @@ async function adminUsers(el) {
               <tr>
                 <td><strong>${esc(u.username)}</strong>${u.isAdmin ? ' <span class="badge badge-running" style="font-size:9px">admin</span>' : ''}<br/><span style="color:var(--muted);font-size:12px">${esc(u.email || '—')}</span></td>
                 <td>${esc(u.plan)}</td>
-                <td style="font-size:12.5px">${esc(u.billingMode)}<br/><span style="color:var(--muted)">🪙 ${u.coins}</span></td>
+                <td style="font-size:12.5px">${esc(u.billingMode)}<br/><span style="color:var(--muted)">${u.coins} coins</span></td>
                 <td>${u.botCount} / ${u.botLimit}</td>
                 <td style="color:var(--muted)">${u.createdAt ? new Date(u.createdAt).toLocaleDateString() : '—'}</td>
                 <td style="color:var(--muted)">${u.lastLogin ? timeAgo(new Date(u.lastLogin).getTime()) : 'never'}</td>
                 <td>
                   <button class="btn btn-sm" data-uplan="${u.id}" data-plan="${u.plan === 'pro' ? 'free' : 'pro'}">${u.plan === 'pro' ? 'Downgrade' : 'Upgrade'}</button>
                   <button class="btn btn-sm btn-green" data-ugrant="${u.id}" data-body='{"grantSubscriptionDays":30}' title="Mark as paid: +30 days">+30d sub</button>
-                  <button class="btn btn-sm" data-ugrant="${u.id}" data-body='{"grantCoins":20}' title="Give 20 coins">+20 🪙</button>
+                  <button class="btn btn-sm" data-ugrant="${u.id}" data-body='{"grantCoins":20}' title="Give 20 coins">+20 coins</button>
                   ${u.id !== state.user.id ? `<button class="btn btn-sm btn-danger" data-udel="${u.id}">Delete</button>` : ''}
                 </td>
               </tr>`).join('')}
@@ -873,7 +955,7 @@ async function adminBots(el) {
   el.innerHTML = '<div class="empty">Loading...</div>';
   try {
     const { bots } = await api('/api/admin/bots');
-    if (!bots.length) return (el.innerHTML = '<div class="empty"><div class="big">🐞</div>No bots on the platform yet.</div>');
+    if (!bots.length) return (el.innerHTML = '<div class="empty">No bots on the platform yet.</div>');
     el.innerHTML = `
       <div class="table-wrap">
         <table>
@@ -926,7 +1008,7 @@ async function adminInstaller(el) {
       <div class="card">
         <h3>Status</h3>
         <p style="line-height:2">
-          Code installed: <strong>${st.installed ? '✅ Yes' : '❌ No'}</strong><br/>
+          Code installed: <strong>${st.installed ? 'Yes' : 'No'}</strong><br/>
           Step: <strong>${esc(st.step || 'idle')}</strong><br/>
           Last install: <strong>${st.lastInstalledAt ? new Date(st.lastInstalledAt).toLocaleString() : 'never'}</strong>
         </p>
