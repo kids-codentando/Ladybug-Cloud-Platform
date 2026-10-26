@@ -195,92 +195,262 @@ async function renderLanding() {
   const price = 3;
   $('#view').innerHTML = `
   <section class="hero">
+    <div class="hero-bg" aria-hidden="true">
+      <div class="hero-grid-lines"></div>
+      <div class="orb orb-1"></div>
+      <div class="orb orb-2"></div>
+      <div class="orb orb-3"></div>
+    </div>
     <div class="wrap hero-grid">
-      <div>
-        <h1>Your WhatsApp bot, online in two minutes.</h1>
-        <p class="lead">Link your number, press start, and Ladybug Cloud keeps your bot running around the clock. <b>The first 7 days are free.</b> After that, claim 20 coins a day to stay online at no cost, or pay $${price} a month and forget about it.</p>
-        <div class="hero-cta">
-          <a href="#/register" class="btn btn-primary btn-lg">Start your free trial</a>
-          <a href="#/pricing" class="btn btn-lg">See pricing</a>
+      <div class="hero-copy">
+        <span class="hero-eyebrow reveal"><i class="dot"></i> Built for group admins &amp; creators</span>
+        <h1 class="reveal">Your WhatsApp bot,<br><span class="grad">online in two minutes.</span></h1>
+        <p class="lead reveal">Link your number, press start, and Ladybug Cloud keeps <b>Ladybug Mini</b> running around the clock. <b>7 days free</b> &mdash; then claim 20 coins a day, or pay $${price}/month and forget about it.</p>
+        <div class="hero-cta reveal">
+          <a href="#/register" class="btn btn-primary btn-lg">Start free &mdash; no card <span class="arrow">&rarr;</span></a>
+          <a href="#/pricing" class="btn btn-lg btn-outline">See pricing</a>
         </div>
-        <p class="hero-note">No card needed. One bot per account.</p>
+        <ul class="hero-ticks reveal">
+          <li><span>&#9889;</span> Live in ~2 minutes</li>
+          <li><span>&#128274;</span> Session stays private</li>
+          <li><span>&#8734;</span> 24/7 uptime</li>
+        </ul>
       </div>
 
-      <div class="botwin" aria-hidden="true">
-        <div class="botwin-bar">
-          <div class="botwin-spots"><i></i><i></i><i></i></div>
-          <div class="botwin-title">ladybug-mini</div>
-          <span class="badge badge-starting" id="demoBadge">Starting</span>
-        </div>
-        <div class="botwin-body">
-          <div class="botwin-stats">
-            <div><span>Uptime</span><b id="demoUp">0m</b></div>
-            <div><span>Restarts</span><b>0</b></div>
-            <div><span>Plan</span><b>Trial</b></div>
+      <div class="hero-visual reveal">
+        <div class="phone">
+          <div class="phone-notch"></div>
+          <div class="phone-screen">
+            <div class="wa-head">
+              <div class="wa-back">&#8249;</div>
+              <div class="wa-avatar">&#128027;</div>
+              <div class="wa-id"><b>Ladybug Mini</b><span>online</span></div>
+              <div class="wa-icons"><span>&#128247;</span><span>&#8942;</span></div>
+            </div>
+            <div class="wa-chat">
+              <div class="wa-day">TODAY</div>
+              <div class="wa-msg out">.menu<span class="wa-time">12:04 <i>&#10003;&#10003;</i></span></div>
+              <div class="wa-msg in menu">
+                <div class="wa-menu-title">&#128027; LADYBUG MINI</div>
+                <div class="wa-menu-row"><span>Owner</span><em>.autostatus .setprefix</em></div>
+                <div class="wa-menu-row"><span>Admin</span><em>.antilink .welcome .tagall</em></div>
+                <div class="wa-menu-row"><span>Downloader</span><em>.play .ytmp4 .tiktok</em></div>
+                <div class="wa-menu-row"><span>General</span><em>.ai .sticker .vv</em></div>
+                <div class="wa-menu-foot">42 commands ready &middot; prefix .</div>
+                <span class="wa-time">12:04</span>
+              </div>
+              <div class="wa-msg out">.sticker<span class="wa-time">12:05 <i>&#10003;&#10003;</i></span></div>
+              <div class="wa-msg in">Sticker created <span class="wa-emoji">&#128027;</span><span class="wa-time">12:05</span></div>
+              <div class="wa-typing"><i></i><i></i><i></i></div>
+            </div>
           </div>
-          <div class="botwin-log" id="demoLog"></div>
         </div>
-        <div class="botwin-foot">
-          <span>Trial ends in <b>7 days</b></span>
-          <span>Balance <b><i class="coin-dot"></i> 20</b></span>
+
+        <div class="float-log" aria-hidden="true">
+          <div class="fl-bar"><span class="fl-dots"><i></i><i></i><i></i></span><b>live log</b></div>
+          <div class="fl-body" id="heroLog"></div>
         </div>
+
+        <div class="float-status" aria-hidden="true">
+          <span class="fs-dot"></span>
+          <div><b>ladybug-mini</b><span>Running &middot; 3d 4h uptime</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="wrap">
+      <div class="trust-strip reveal">
+        <span>Runs <b>Ladybug Mini</b></span><i></i>
+        <span>No coding required</span><i></i>
+        <span>One bot per account</span><i></i>
+        <span>Backed up automatically</span>
+      </div>
+    </div>
+  </section>
+
+  <div class="marquee" aria-hidden="true">
+    <div class="marquee-track">
+      ${['.autostatus','.antilink','.welcome','.tagall','.play','.ytmp4','.tiktok','.ai','.sticker','.vv','.antispam','.broadcast','.setprefix','.lyrics','.translate','.antidelete','.instagram','.textmaker']
+        .map(c => `<span>${c}</span>`).join('')}
+      ${['.autostatus','.antilink','.welcome','.tagall','.play','.ytmp4','.tiktok','.ai','.sticker','.vv','.antispam','.broadcast','.setprefix','.lyrics','.translate','.antidelete','.instagram','.textmaker']
+        .map(c => `<span>${c}</span>`).join('')}
+    </div>
+  </div>
+
+  <section class="stats-band">
+    <div class="wrap stats-band-inner">
+      <div class="sb-item reveal"><b>~2 min</b><span>From sign-up to live</span></div>
+      <div class="sb-item reveal"><b>24/7</b><span>Always-on hosting</span></div>
+      <div class="sb-item reveal"><b>42+</b><span>Bot commands</span></div>
+      <div class="sb-item reveal"><b>7 days</b><span>Free, no card</span></div>
+    </div>
+  </section>
+
+  <section class="section" id="commands">
+    <div class="wrap">
+      <div class="section-title center reveal">
+        <span class="kicker">Real bot commands</span>
+        <h2>What your bot can do</h2>
+        <p>Not marketing fluff &mdash; these are the command categories live on your Ladybug Mini bot. Sign up and start using them with your prefix.</p>
+      </div>
+      <div class="cmd-grid">
+        <article class="cmd-card reveal" data-accent="amber">
+          <div class="cmd-top"><div class="cmd-icon">&#128081;</div><span class="cmd-count">14+ cmds</span></div>
+          <h3>Owner</h3>
+          <p>Control your bot account &mdash; status, privacy, branding &amp; broadcasts.</p>
+          <div class="chips"><span>.autostatus</span><span>.savestatus</span><span>.autoread</span><span>.antidelete</span><span>.setprefix</span><span>.broadcast</span><span class="more">+8 more</span></div>
+        </article>
+        <article class="cmd-card reveal" data-accent="red">
+          <div class="cmd-top"><div class="cmd-icon">&#128737;</div><span class="cmd-count">14+ cmds</span></div>
+          <h3>Admin</h3>
+          <p>Keep groups clean &mdash; anti-spam, links, bots, tags &amp; welcome flows.</p>
+          <div class="chips"><span>.antilink</span><span>.antispam</span><span>.antibot</span><span>.welcome</span><span>.tagall</span><span>.warn</span><span class="more">+8 more</span></div>
+        </article>
+        <article class="cmd-card reveal" data-accent="violet">
+          <div class="cmd-top"><div class="cmd-icon">&#11015;</div><span class="cmd-count">10+ cmds</span></div>
+          <h3>Downloader</h3>
+          <p>Pull media from the apps you already use &mdash; fast and simple.</p>
+          <div class="chips"><span>.play</span><span>.ytmp4</span><span>.tiktok</span><span>.instagram</span><span>.facebook</span><span>.lyrics</span><span class="more">+4 more</span></div>
+        </article>
+        <article class="cmd-card reveal" data-accent="mint">
+          <div class="cmd-top"><div class="cmd-icon">&#10024;</div><span class="cmd-count">14+ cmds</span></div>
+          <h3>General</h3>
+          <p>AI, stickers, view-once tools, text styles &amp; fun for every chat.</p>
+          <div class="chips"><span>.ai</span><span>.sticker</span><span>.vv</span><span>.viewonce</span><span>.textmaker</span><span>.translate</span><span class="more">+8 more</span></div>
+        </article>
       </div>
     </div>
   </section>
 
   <section class="section">
-    <div class="wrap section-split">
-      <div class="section-head">
+    <div class="wrap">
+      <div class="section-title center reveal">
+        <span class="kicker">How it works</span>
         <h2>Online in three steps</h2>
-        <p>No server, no terminal, no config files.</p>
+        <p>No server, no terminal, no config files. Most people are live in minutes.</p>
       </div>
-      <ol class="steps">
-        <li><div><h3>Link your WhatsApp number</h3><p>Enter your phone number and we show an 8-digit code. Type it into WhatsApp under Linked devices. Already have a Ladybug session ID? Paste it instead.</p></div></li>
-        <li><div><h3>Press Start</h3><p>Your bot gets its own private process and connects in seconds. Watch the live log to see exactly what it is doing.</p></div></li>
-        <li><div><h3>Keep it running</h3><p>Claim 20 free coins each day, which covers a bot for 24 hours. Prefer not to think about it? Subscribe and the bot runs without using coins.</p></div></li>
-      </ol>
+      <div class="step-row">
+        <div class="step-card reveal">
+          <div class="step-num">1</div>
+          <span class="step-tag">Get session</span>
+          <h3>Link your number</h3>
+          <p>Enter your phone number and we show an 8-digit code. Type it into WhatsApp under <b>Linked devices</b> &mdash; or paste an existing session ID.</p>
+        </div>
+        <div class="step-card reveal">
+          <div class="step-num">2</div>
+          <span class="step-tag">Press start</span>
+          <h3>Bot goes live</h3>
+          <p>Your bot gets its own private process and connects in seconds. Watch the live log to see exactly what it is doing.</p>
+        </div>
+        <div class="step-card reveal">
+          <div class="step-num">3</div>
+          <span class="step-tag">Stay online</span>
+          <h3>Keep it running</h3>
+          <p>Claim 20 free coins each day &mdash; that covers a bot for 24 hours. Or subscribe and it runs without using coins.</p>
+        </div>
+        <div class="step-line" aria-hidden="true"></div>
+      </div>
     </div>
   </section>
 
   <section class="section">
-    <div class="wrap section-split">
-      <div class="section-head">
-        <h2>What you get</h2>
-        <p>Everything needed to run Ladybug Mini reliably.</p>
+    <div class="wrap">
+      <div class="section-title center reveal">
+        <span class="kicker">Built to stay online</span>
+        <h2>Everything you need, nothing you don't</h2>
+        <p>Reliability is the product. Ladybug Cloud handles the hard parts so your bot just works.</p>
       </div>
-      <dl class="deflist">
-        <div><dt>Pairing in the browser</dt><dd>Generate a session without installing anything on your computer.</dd></div>
-        <div><dt>Live logs</dt><dd>Your bot's console streams into the dashboard, so problems are easy to spot and fix.</dd></div>
-        <div><dt>Automatic restarts</dt><dd>If the bot crashes, it comes back on its own with a growing delay between attempts.</dd></div>
-        <div><dt>Private by default</dt><dd>Every bot runs in its own process with its own session folder. Session IDs are never shown publicly.</dd></div>
-        <div><dt>Always the latest bot</dt><dd>The bot code is maintained centrally, so you do not update anything yourself.</dd></div>
-        <div><dt>Public status page</dt><dd>See platform health and uptime at a glance on the <a href="#/status" style="text-decoration:underline">status page</a>.</dd></div>
-      </dl>
+      <div class="bento">
+        <div class="bento-card lg reveal">
+          <div class="bento-head"><div class="feat-ic">&#128220;</div><div><h3>Live logs, streamed</h3><p>Your bot's console streams straight into the dashboard, so problems are easy to spot and fix.</p></div></div>
+          <div class="term" aria-hidden="true">
+            <div class="term-bar"><span class="term-dots"><i></i><i></i><i></i></span><b>ladybug-mini &mdash; console</b></div>
+            <div class="term-body" id="bentoLog"></div>
+          </div>
+        </div>
+        <div class="bento-card tall reveal">
+          <div class="feat-ic">&#128241;</div>
+          <h3>Pair in the browser</h3>
+          <p>Generate a session without installing anything on your computer. No Node, no terminal, no config files.</p>
+          <div class="pair-visual" aria-hidden="true">
+            <div class="pv-code">8 4 2 1 9 3 6 7</div>
+            <div class="pv-label">Pairing code &middot; expires in 60s</div>
+          </div>
+        </div>
+        <div class="bento-card reveal"><div class="feat-ic">&#128260;</div><h3>Automatic restarts</h3><p>If the bot crashes, it comes back on its own with a growing delay between attempts.</p></div>
+        <div class="bento-card reveal"><div class="feat-ic">&#128274;</div><h3>Private by default</h3><p>Every bot runs in its own process with its own session folder. Session IDs are never shown publicly.</p></div>
+        <div class="bento-card reveal"><div class="feat-ic">&#9889;</div><h3>Always the latest bot</h3><p>The bot code is maintained centrally, so you never update anything yourself.</p></div>
+        <div class="bento-card reveal"><div class="feat-ic">&#128200;</div><h3>Public status page</h3><p>See platform health and uptime at a glance on the <a href="#/status">status page</a>.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap">
+      <div class="section-title center reveal">
+        <span class="kicker">Who it's for</span>
+        <h2>Made for people who run chats</h2>
+        <p>If you manage a community, a brand, or a busy group, your bot earns its keep every day.</p>
+      </div>
+      <div class="usecase-grid">
+        <div class="usecase reveal"><span class="uc-emoji">&#128101;</span><h3>Group admins</h3><p>Anti-spam, welcome flows, tag-all and moderation that runs itself.</p></div>
+        <div class="usecase reveal"><span class="uc-emoji">&#127908;</span><h3>Creators</h3><p>Auto-status, sticker packs and downloaders to keep fans engaged.</p></div>
+        <div class="usecase reveal"><span class="uc-emoji">&#128722;</span><h3>Small businesses</h3><p>Fast replies, media downloads and AI answers without hiring.</p></div>
+        <div class="usecase reveal"><span class="uc-emoji">&#129309;</span><h3>Resellers</h3><p>Spin up bots for clients from one clean dashboard.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap">
+      <div class="section-title center reveal">
+        <span class="kicker">Loved by operators</span>
+        <h2>Less grind, more uptime</h2>
+      </div>
+      <div class="quote-grid">
+        <figure class="quote reveal">
+          <div class="stars">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
+          <blockquote>&ldquo;Deployed in under a minute. Autostatus and antidelete alone save me hours every week &mdash; it feels like a full-time assistant on WhatsApp.&rdquo;</blockquote>
+          <figcaption><span class="ava">AM</span><div><b>Arjun M.</b><span>Community manager</span></div></figcaption>
+        </figure>
+        <figure class="quote reveal">
+          <div class="stars">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
+          <blockquote>&ldquo;Group mods love antilink and antispam. We cut spam overnight, and the live logs make fixing anything trivial.&rdquo;</blockquote>
+          <figcaption><span class="ava">PK</span><div><b>Priya K.</b><span>Group admin</span></div></figcaption>
+        </figure>
+        <figure class="quote reveal">
+          <div class="stars">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
+          <blockquote>&ldquo;Sticker packs and the downloader are insanely useful. Pasted my session, hit start, and the bot was live &mdash; zero coding.&rdquo;</blockquote>
+          <figcaption><span class="ava">DR</span><div><b>Dev R.</b><span>Creator</span></div></figcaption>
+        </figure>
+      </div>
     </div>
   </section>
 
   <section class="section" id="pricing">
     <div class="wrap">
-      <div class="section-title">
+      <div class="section-title center reveal">
+        <span class="kicker">Pricing</span>
         <h2>Pricing that starts at zero</h2>
         <p>Try it free for a week. After that, pick whichever way suits you.</p>
       </div>
       <div class="pricing">
-        <div class="plan">
+        <div class="plan reveal">
           <div class="plan-name">Free trial</div>
           <div class="plan-price">$0<small>for 7 days</small></div>
           <p class="plan-desc">Everything works from day one. No card required.</p>
           <ul><li>1 bot, hosted for you</li><li>Live logs and auto-restart</li><li>Browser pairing</li></ul>
           <a href="#/register" class="btn btn-block">Start free trial</a>
         </div>
-        <div class="plan featured">
-          <div class="plan-name">Daily coins <span class="plan-tag">Stays free</span></div>
+        <div class="plan featured reveal">
+          <div class="plan-glow" aria-hidden="true"></div>
+          <div class="plan-name">Daily coins <span class="plan-tag">Most popular</span></div>
           <div class="plan-price">20<small>coins a day, free</small></div>
           <p class="plan-desc">Claim once a day. 20 coins keeps one bot online for 24 hours.</p>
           <ul><li>Claim every 24 hours</li><li>Balance holds up to 140 coins</li><li>If coins run out, the bot pauses and nothing is deleted</li></ul>
           <a href="#/register" class="btn btn-primary btn-block">Create free account</a>
         </div>
-        <div class="plan">
+        <div class="plan reveal">
           <div class="plan-name">Unlimited</div>
           <div class="plan-price">$${price}<small>per month</small></div>
           <p class="plan-desc">For bots you never want to think about.</p>
@@ -293,12 +463,13 @@ async function renderLanding() {
 
   <section class="section">
     <div class="wrap section-split">
-      <div class="section-head"><h2>Questions</h2><p>The short answers.</p></div>
-      <div class="faq">
+      <div class="section-head reveal"><span class="kicker">FAQ</span><h2>Questions</h2><p>The short answers.</p></div>
+      <div class="faq reveal">
         <details><summary>What happens when my trial ends?</summary><p>Your bot keeps running as long as you have coins or a subscription. Each day of hosting costs 20 coins, which is exactly what one daily claim gives you.</p></details>
         <details><summary>What if I forget to claim?</summary><p>If your balance cannot cover the next day, the bot pauses and shows a notice on your dashboard. Claim your coins and press Start to bring it back. Your settings and session stay saved.</p></details>
         <details><summary>Can I stack coins?</summary><p>Yes, up to 140. That is a week of hosting if you want to claim less often.</p></details>
         <details><summary>How do I pay the $${price} a month?</summary><p>Use the Subscribe button on your dashboard. Once your payment is confirmed, your account switches to Unlimited.</p></details>
+        <details><summary>Is it safe to use with my WhatsApp?</summary><p>The bot runs as a linked device, like WhatsApp Web. Your chats stay on WhatsApp and session IDs are never shown publicly. Still follow WhatsApp's rules: don't spam groups or blast random numbers.</p></details>
         <details><summary>Will I lose my account if the site restarts?</summary><p>No. Accounts, bots, coins and logins are backed up continuously and restored automatically.</p></details>
       </div>
     </div>
@@ -306,9 +477,13 @@ async function renderLanding() {
 
   <section class="cta-band">
     <div class="wrap">
-      <div class="cta-inner">
-        <h2>Get your bot online today.</h2>
-        <a href="#/register" class="btn btn-lg">Start your free trial</a>
+      <div class="cta-inner reveal">
+        <div class="cta-orb" aria-hidden="true"></div>
+        <div class="cta-copy">
+          <h2>Get your bot online today.</h2>
+          <p>Seven days free. No card. One bot per account.</p>
+        </div>
+        <a href="#/register" class="btn btn-lg">Start your free trial <span class="arrow">&rarr;</span></a>
       </div>
     </div>
   </section>
@@ -319,35 +494,83 @@ async function renderLanding() {
       <span>Not affiliated with WhatsApp Inc. Use at your own risk.</span>
     </div>
   </footer>`;
-  runDemo();
+  initLanding();
 }
 
-// one-time "bot coming online" sequence in the hero window
-function runDemo() {
-  const log = $('#demoLog'); if (!log) return;
-  const lines = [
-    ['host', 'Starting ladybug-mini'],
-    ['bot', 'Session loaded'],
-    ['bot', 'Connecting to WhatsApp...'],
-    ['ok', 'Connected. 42 commands ready'],
-    ['bot', 'Listening for messages'],
-  ];
-  const t = (i) => `<span class="t">12:0${i}</span>`;
+/* ---------------- landing interactions ---------------- */
+function initLanding() {
+  // scroll reveal
+  const items = $$('.reveal');
+  if (!('IntersectionObserver' in window)) {
+    items.forEach((el) => el.classList.add('in'));
+  } else {
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach((e) => {
+        if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
+      });
+    }, { threshold: 0.12, rootMargin: '0px 0px -40px 0px' });
+    items.forEach((el, i) => { el.style.transitionDelay = `${Math.min(i % 4, 3) * 70}ms`; io.observe(el); });
+  }
+
+  // nav shadow on scroll
+  if (!window._navScroll) {
+    window._navScroll = true;
+    const nav = document.querySelector('.nav');
+    const onScroll = () => nav && nav.classList.toggle('scrolled', window.scrollY > 8);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+  }
+
+  // hero live log
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  let i = 0;
-  const step = () => {
-    if (!$('#demoLog')) return; // navigated away
-    const [kind, text] = lines[i];
-    log.insertAdjacentHTML('beforeend', `<div class="l">${t(i)}${kind === 'ok' ? `<span class="g">${text}</span>` : text}</div>`);
-    i++;
-    if (i === 4) {
-      $('#demoBadge').className = 'badge badge-running'; $('#demoBadge').textContent = 'Running';
-      $('#demoUp').textContent = '3d 4h';
-    }
-    if (i < lines.length) setTimeout(step, reduce ? 0 : 650);
-  };
-  step();
+  const heroLines = [
+    ['12:00', 'Starting ladybug-mini', ''],
+    ['12:01', 'Session loaded', ''],
+    ['12:02', 'Connecting to WhatsApp...', ''],
+    ['12:03', 'Connected. 42 commands ready', 'g'],
+    ['12:04', 'Listening for messages', ''],
+  ];
+  const heroLog = $('#heroLog');
+  if (heroLog) {
+    heroLog.innerHTML = '';
+    let i = 0;
+    const push = () => {
+      if (!$('#heroLog')) return;
+      const [t, txt, cls] = heroLines[i];
+      heroLog.insertAdjacentHTML('beforeend',
+        `<div class="fl-line"><span class="fl-t">${t}</span><span class="${cls}">${txt}</span></div>`);
+      heroLog.scrollTop = heroLog.scrollHeight;
+      i++;
+      if (i < heroLines.length) setTimeout(push, reduce ? 0 : 700);
+    };
+    push();
+  }
+
+  // bento terminal loop
+  const bento = $('#bentoLog');
+  if (bento) {
+    const seq = [
+      ['12:04:02', 'bot ready · 42 commands', 'g'],
+      ['12:04:09', 'message from +27 82 *** · .sticker', ''],
+      ['12:04:11', 'sticker generated in 640ms', 'g'],
+      ['12:04:26', 'group antilink triggered · removed', 'w'],
+      ['12:04:31', 'auto-restart check · healthy', 'g'],
+      ['12:04:44', 'listening for messages', ''],
+    ];
+    let k = 0;
+    const tick = () => {
+      if (!$('#bentoLog')) return;
+      const [t, txt, cls] = seq[k % seq.length];
+      bento.insertAdjacentHTML('beforeend',
+        `<div class="term-line"><span class="term-t">${t}</span><span class="${cls}">${txt}</span></div>`);
+      if (bento.children.length > 6) bento.firstElementChild.remove();
+      k++;
+      setTimeout(tick, reduce ? 400 : 1600);
+    };
+    tick();
+  }
 }
+
 
 /* ---------------------------------------------------------------- auth */
 function authForm(mode) {
