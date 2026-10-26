@@ -21,6 +21,10 @@ services:
         value: Ntando
       - key: ADMIN_PASSWORD
         value: mods
+      # Free MongoDB Atlas connection string - backs up users, bots, coins and
+      # logins so they survive Render redeploys and sleep. Paste it in the dashboard.
+      - key: MONGODB_URI
+        sync: false
       - key: SESSION_SECRET
         generateValue: true
       - key: FREE_BOT_LIMIT

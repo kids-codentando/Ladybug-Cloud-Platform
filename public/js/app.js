@@ -807,6 +807,7 @@ async function adminOverview(el) {
       <div class="grid grid-3" style="margin-top:18px">
         <div class="card"><h3>System</h3><p>Node ${esc(s.node)}<br/>${esc(s.platform)}<br/>${s.cpus} CPUs · Load ${s.loadavg.join(' / ')}</p></div>
         <div class="card"><h3>Memory</h3><p>RSS ${s.memory.rss} MB<br/>Heap ${s.memory.heap} MB</p></div>
+        <div class="card"><h3>Database backup</h3><p>${!s.backup.enabled ? '⚪ Not configured<br/><span style="font-size:12px">Set MONGODB_URI on the server to keep data across redeploys.</span>' : s.backup.ready ? `✅ MongoDB connected<br/>Last backup: ${s.backup.lastPushAt ? timeAgo(s.backup.lastPushAt) : 'pending'}${s.backup.restored ? `<br/>Restored on boot: ${s.backup.restored.users} users, ${s.backup.restored.bots} bots` : ''}` : `❌ Not connected<br/><span style="font-size:12px;color:#ff8095">${esc(s.backup.lastError || '')}</span>`}</p></div>
         <div class="card"><h3>Bot Code</h3><p>${s.installed ? '✅ Installed' : '❌ Not installed'}<br/>Admins: ${s.admins}</p></div>
       </div>`;
   } catch (e) {

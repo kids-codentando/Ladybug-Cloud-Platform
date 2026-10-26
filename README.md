@@ -32,6 +32,19 @@ Built by **Ntandomods** · Deployable on **Render** in one click.
 
 ---
 
+## 🗄️ MongoDB backup (keeps data on Render free)
+
+Set one environment variable and the platform backs itself up:
+
+1. Create a free cluster at [MongoDB Atlas](https://www.mongodb.com/cloud/atlas/register) (M0, free).
+2. **Database Access** → add a user with a password. **Network Access** → allow `0.0.0.0/0` (Render's IPs change).
+3. **Connect → Drivers** → copy the connection string, e.g. `mongodb+srv://user:pass@cluster0.xxxx.mongodb.net/`.
+4. In Render → your service → **Environment** → add `MONGODB_URI` with that string and redeploy.
+
+What happens: users, bots, coins, subscriptions and login sessions are mirrored to MongoDB ~2 seconds after every change, and restored automatically on boot whenever the local disk is empty (redeploy / wake from sleep). Bot WhatsApp session IDs live in the database, so bots come back too. If MongoDB can't be reached at boot the site still starts and backups pause for that run (it never overwrites the backup with an empty database). **Admin → Overview** shows backup status. Optional: `MONGODB_DB` (default `ladybug_cloud`).
+
+---
+
 ## 🚀 Deploy on Render
 
 ### Option A — Blueprint (recommended)
