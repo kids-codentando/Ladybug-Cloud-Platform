@@ -134,6 +134,7 @@ When the bot starts:
 | Economy | `.balance` `.daily` `.work` `.bet` `.shop` |
 | Premium ⭐ | `.glitchtext` `.banner` `.matrixrain` `.font` `.base64` `.fastdl` `.fastmp3` |
 | Prank 🎭 | `.fakecrash` `.glitchscreen` `.fakeban` `.fakescreen` `.hack` `.fakelag` `.loadingbar` |
+| Crush 💘 | `.crush` `.crushscan` `.crushmeter` `.crushmenu` |
 
 > Type `.menu` in WhatsApp to see the complete, live command list.
 
@@ -229,6 +230,24 @@ recipient is in on the joke.
 | `.fakelag [secs]` | Types for N seconds, then says nothing (2–12s) |
 | `.loadingbar [label]` | Progress bar that never finishes |
 | `.prankmenu` | Lists the pack |
+
+### 💘 Crush pack
+
+Three group pranks plus a menu, all built with the shared `ladybugTheme` frame so
+they read like the rest of the bot.
+
+| Command | What it does |
+|---------|--------------|
+| `.crush` | "Someone in this group has a crush on you" — picks a real member |
+| `.crushscan` | Radar sweep that edits one message until it "locks on" |
+| `.crushmeter @user` | Compatibility score, deterministic per pair |
+| `.crushmenu` | Lists the crush pack |
+
+Names come only from the current group's participant list, are never persisted,
+and are never sent anywhere. `.crushmeter` hashes the sorted pair of handles, so
+two people comparing results in the chat see the same number instead of a fresh
+random one each time. `.crush` and `.crushscan` refuse to run outside a group
+rather than inventing a name.
 
 Rendering goes through `@napi-rs/canvas` (prebuilt binary, no cairo/pango
 headers needed) with `canvas` as fallback; if neither loads, the commands

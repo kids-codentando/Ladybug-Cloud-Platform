@@ -14,6 +14,7 @@
  */
 
 const config = require('../../config');
+const theme = require('../../utils/ladybugTheme');
 
 // Rendering backend. `@napi-rs/canvas` ships a prebuilt binary, so it works on
 // hosts where node-canvas fails to compile (no cairo/pango headers, ephemeral
@@ -392,7 +393,9 @@ const hack = {
         text:
           '📸 *Uploading your selfies to the internet...*\n\n' +
           "_just kidding. I downloaded nothing, I can't even see your gallery._" +
-          REVEAL,
+          REVEAL +
+          '\n\n' +
+          theme.signature(),
       },
       { quoted: msg }
     );
@@ -422,7 +425,10 @@ const fakelag = {
     await sock.sendMessage(
       from,
       {
-        text: `…sorry, I was typing a ${secs}-second message and then forgot it.\n\nTyping for ${secs}s and saying nothing is the real prank.${REVEAL}`,
+        text:
+          `…sorry, I was typing a ${secs}-second message and then forgot it.\n\n` +
+          `Typing for ${secs}s and saying nothing is the real prank.${REVEAL}\n\n` +
+          theme.signature(),
       },
       { quoted: msg }
     );
@@ -473,20 +479,20 @@ const prankmenu = {
     const from = msg.key.remoteJid;
     const p = PREFIX();
     const text = [
-      '🎭 *PRANK PACK*',
-      '',
-      `▸ ${p}fakecrash [app] — fake "isn't responding" dialog`,
-      `▸ ${p}glitchscreen [text] — fake frozen screen`,
-      `▸ ${p}fakeban [number] — fake ban notice`,
-      `▸ ${p}fakescreen [label] — stuck at 99%`,
-      `▸ ${p}hack — fake hacking sequence`,
-      `▸ ${p}fakelag [secs] — types, then says nothing`,
-      `▸ ${p}loadingbar [label] — bar that never finishes`,
-      '',
-      '_Every prank ends with a visible reveal, so nobody is left',
-      'thinking their phone or account is actually broken._',
-      '',
-      '> 🐞 Ladybug Mini • pranks are free',
+      theme.header('Prank Pack'),
+      theme.line(`${theme.ICON.sparkle} *${p}fakecrash [app]* — "isn't responding" dialog`),
+      theme.line(`${theme.ICON.net} *${p}glitchscreen [text]* — frozen screen`),
+      theme.line(`${theme.ICON.cross} *${p}fakeban [number]* — ban notice`),
+      theme.line(`${theme.ICON.clock} *${p}fakescreen [label]* — stuck at 99%`),
+      theme.line(`${theme.ICON.robot} *${p}hack* — fake hacking sequence`),
+      theme.line(`${theme.ICON.bolt} *${p}fakelag [secs]* — types, says nothing`),
+      theme.line(`${theme.ICON.chart} *${p}loadingbar [label]* — bar that never ends`),
+      theme.divider(),
+      theme.line(`${theme.ICON.fire} *Crush pack:* ${p}crush · ${p}crushscan · ${p}crushmeter`),
+      theme.blank(),
+      theme.line(`${theme.ICON.leaf} Every prank ends with a visible reveal,`),
+      theme.line(`${theme.ICON.leaf} so nobody thinks their phone is really broken.`),
+      theme.footer(),
     ].join('\n');
     await sock.sendMessage(from, { text }, { quoted: msg });
   },
