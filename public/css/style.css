@@ -691,3 +691,25 @@ tr:hover td { background: rgba(255, 255, 255, .015); }
   .reveal{opacity:1;transform:none;transition:none}
   .phone,.float-log,.float-status,.marquee-track{animation:none!important}
 }
+
+/* ---------------------------------------------------------------- auto-claim */
+/* $2/month add-on: the server claims the daily coins for you. */
+.pricing{grid-template-columns:repeat(4,1fr)}
+.plan-tag.alt{background:var(--mint);color:#06231a}
+@media (max-width:1100px){ .pricing{grid-template-columns:repeat(2,1fr)} }
+@media (max-width:640px){ .pricing{grid-template-columns:1fr} }
+
+.autoclaim{margin-top:14px;padding:14px 16px;border-radius:14px;border:1px solid var(--line);
+  background:var(--surface-2);font-size:13px;line-height:1.5}
+.autoclaim p{margin:6px 0 0;color:var(--muted)}
+.autoclaim-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13.5px}
+.autoclaim-top b{color:var(--text);font-weight:600}
+.autoclaim-left{margin-left:auto;color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
+.autoclaim.on{border-color:color-mix(in srgb,var(--mint) 45%,var(--line));
+  background:linear-gradient(180deg,color-mix(in srgb,var(--mint) 10%,var(--surface-2)),var(--surface-2))}
+.autoclaim.on b{color:var(--mint)}
+.autoclaim.pending{border-color:color-mix(in srgb,var(--amber, #f5a524) 40%,var(--line))}
+.autoclaim.pending b,.autoclaim.pending .autoclaim-left{color:var(--amber, #f5a524)}
+.autoclaim .btn-autoclaim{margin-top:10px}
+.dot-ok{width:8px;height:8px;border-radius:50%;background:var(--mint);flex:0 0 auto;
+  box-shadow:0 0 0 3px color-mix(in srgb,var(--mint) 22%,transparent)}

@@ -82,6 +82,33 @@ function walletHTML(b) {
   const sub = b.mode === 'subscription' || b.mode === 'admin' ? '' : (c.paymentUrl
     ? `<a class="btn" href="${esc(c.paymentUrl)}${c.paymentUrl.includes('?') ? '&' : '?'}client_reference_id=${encodeURIComponent(state.user.username)}" target="_blank" rel="noopener">Subscribe for $${c.priceUsd}/month</a>`
     : `<button class="btn" id="subBtn">Subscribe for $${c.priceUsd}/month</button>`);
+
+  // Auto-claim add-on ($2/month) — the server claims the daily coins for you.
+  const ac = b.autoClaim || {};
+  let autoClaim;
+  if (ac.active) {
+    autoClaim = `<div class="autoclaim on">
+        <div class="autoclaim-top"><span class="dot-ok"></span><b>Auto-claim on</b>
+          <span class="autoclaim-left">renews in <span data-left="${ac.until}">${fmtLeft(ac.until - now)}</span></span></div>
+        <p>We claim your ${c.claimCoins} coins every ${c.claimCooldownHours || 24}h for you — you'll never lose a bot to a forgotten claim.</p>
+      </div>`;
+  } else if (ac.requested) {
+    autoClaim = `<div class="autoclaim off pending">
+        <div class="autoclaim-top"><b>Auto-claim</b><span class="autoclaim-left">pending</span></div>
+        <p>Request received. The admin will switch it on for you \u2014 no payment needed until then.</p>
+      </div>`;
+  } else if (ac.redundant) {
+    autoClaim = `<div class="autoclaim off">
+        <div class="autoclaim-top"><b>Auto-claim</b><span class="autoclaim-left">not needed</span></div>
+        <p>Your plan already runs without coins, so there is nothing to claim.</p>
+      </div>`;
+  } else {
+    autoClaim = `<div class="autoclaim off">
+        <div class="autoclaim-top"><b>Auto-claim</b><span class="autoclaim-left">$${ac.priceUsd}/month</span></div>
+        <p>Never lose a bot to a forgotten claim. We claim your ${c.claimCoins} daily coins automatically.</p>
+        <button class="btn btn-sm btn-autoclaim" id="autoClaimBtn">Turn on auto-claim</button>
+      </div>`;
+  }
   const log = (b.log || []).map((l) => `<div class="log-row"><span>${esc(l.reason)}</span><b class="${l.delta >= 0 ? 'plus' : 'minus'}">${l.delta >= 0 ? '+' : ''}${l.delta}</b></div>`).join('');
   return `
   <div class="wallet">
@@ -95,6 +122,7 @@ function walletHTML(b) {
       <div class="k">Coins</div>
       <div class="coin-big"><i class="coin-dot"></i>${b.coins}<small>of ${c.maxCoins} max</small></div>
       <div class="wallet-actions">${claimBtn}${sub}</div>
+      ${autoClaim}
       ${log ? `<details class="coin-log"><summary>Recent activity</summary>${log}</details>` : ''}
     </div>
   </div>`;
@@ -119,6 +147,16 @@ async function loadWallet() {
     };
     const sb = $('#subBtn');
     if (sb) sb.onclick = () => toast('Subscriptions are activated by the admin - contact them to subscribe.', 'ok');
+    const ab = $('#autoClaimBtn');
+    if (ab) ab.onclick = async () => {
+      ab.disabled = true; ab.innerHTML = '<span class="spin"></span>';
+      try {
+        const r = await api('/api/billing/autoclaim', { method: 'POST' });
+        if (r.url) { window.open(r.url, '_blank', 'noopener'); toast('Finish the payment to switch it on.', 'ok'); }
+        else toast(r.message || 'Auto-claim requested.', 'ok');
+      } catch (e) { toast(e.message, 'err'); }
+      loadWallet();
+    };
   } catch (e) { /* ignore */ }
 }
 
@@ -451,6 +489,13 @@ async function renderLanding() {
           <a href="#/register" class="btn btn-primary btn-block">Create free account</a>
         </div>
         <div class="plan reveal">
+          <div class="plan-name">Auto-claim <span class="plan-tag alt">New</span></div>
+          <div class="plan-price">$2<small>per month</small></div>
+          <p class="plan-desc">Keep the free coins, stop remembering to claim them.</p>
+          <ul><li>We claim your 20 coins every 24h</li><li>No more paused bots after a busy day</li><li>Cheaper than Unlimited — you keep paying in coins</li></ul>
+          <a href="#/register" class="btn btn-block">Start free trial</a>
+        </div>
+        <div class="plan reveal">
           <div class="plan-name">Unlimited</div>
           <div class="plan-price">$${price}<small>per month</small></div>
           <p class="plan-desc">For bots you never want to think about.</p>
@@ -467,6 +512,7 @@ async function renderLanding() {
       <div class="faq reveal">
         <details><summary>What happens when my trial ends?</summary><p>Your bot keeps running as long as you have coins or a subscription. Each day of hosting costs 20 coins, which is exactly what one daily claim gives you.</p></details>
         <details><summary>What if I forget to claim?</summary><p>If your balance cannot cover the next day, the bot pauses and shows a notice on your dashboard. Claim your coins and press Start to bring it back. Your settings and session stay saved.</p></details>
+        <details><summary>What is auto-claim?</summary><p>A $2/month add-on that claims your free coins for you. You still pay for hosting in coins, but you never have to remember the daily tap — so a busy day can't pause your bot. If you already pay for Unlimited, auto-claim is pointless and the dashboard will tell you so.</p></details>
         <details><summary>Can I stack coins?</summary><p>Yes, up to 140. That is a week of hosting if you want to claim less often.</p></details>
         <details><summary>How do I pay the $${price} a month?</summary><p>Use the Subscribe button on your dashboard. Once your payment is confirmed, your account switches to Unlimited.</p></details>
         <details><summary>Is it safe to use with my WhatsApp?</summary><p>The bot runs as a linked device, like WhatsApp Web. Your chats stay on WhatsApp and session IDs are never shown publicly. Still follow WhatsApp's rules: don't spam groups or blast random numbers.</p></details>
@@ -1141,6 +1187,7 @@ async function adminUsers(el) {
                   <button class="btn btn-sm" data-uplan="${u.id}" data-plan="${u.plan === 'pro' ? 'free' : 'pro'}">${u.plan === 'pro' ? 'Downgrade' : 'Upgrade'}</button>
                   <button class="btn btn-sm btn-green" data-ugrant="${u.id}" data-body='{"grantSubscriptionDays":30}' title="Mark as paid: +30 days">+30d sub</button>
                   <button class="btn btn-sm" data-ugrant="${u.id}" data-body='{"grantCoins":20}' title="Give 20 coins">+20 coins</button>
+                  <button class="btn btn-sm" data-ugrant="${u.id}" data-body='{"grantAutoClaimDays":30}' title="Grant 30 days of auto-claim">+auto-claim</button>
                   ${u.id !== state.user.id ? `<button class="btn btn-sm btn-danger" data-udel="${u.id}">Delete</button>` : ''}
                 </td>
               </tr>`).join('')}

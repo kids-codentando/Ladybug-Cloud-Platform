@@ -89,6 +89,7 @@ function publicUser(u) {
     trialEndsAt: u.trialEndsAt || null,
     subscriptionUntil: u.subscriptionUntil || null,
     coins: u.coins || 0,
+    autoClaimUntil: u.autoClaimUntil || null,
   };
 }
 
@@ -227,6 +228,40 @@ app.post('/api/coins/claim', requireAuth, (req, res) => {
   }
   db.save();
   res.json({ ok: true, ...r, billing: billing.summary(req.user) });
+});
+
+// Auto-claim add-on ($2/month): the server claims the daily coins for you.
+app.post('/api/billing/autoclaim', requireAuth, (req, res) => {
+  const b = billing.summary(req.user);
+  if (b.autoClaim.active) {
+    return res.status(409).json({ error: 'Auto-claim is already active.', billing: b });
+  }
+  if (!billing.cfg.autoClaimPaymentUrl) {
+    // No checkout configured: record the intent so the admin can see it.
+    if (req.user.autoClaimRequestedAt) {
+      return res.status(409).json({
+        error: 'Your auto-claim request is already pending. The admin will activate it shortly.',
+        billing: b,
+      });
+    }
+    req.user.autoClaimRequestedAt = Date.now();
+    db.save();
+    return res.json({
+      ok: true,
+      manual: true,
+      message:
+        `Auto-claim costs $${billing.cfg.autoClaimPriceUsd}/month. ` +
+        'Your request has been recorded - the admin will activate it for you.',
+      billing: billing.summary(req.user),
+    });
+  }
+  const url = billing.cfg.autoClaimPaymentUrl;
+  res.json({
+    ok: true,
+    url:
+      `${url}${url.includes('?') ? '&' : '?'}plan=autoclaim` +
+      `&client_reference_id=${encodeURIComponent(req.user.username)}`,
+  });
 });
 
 // ---------------------------------------------------------------- user bots
@@ -475,6 +510,11 @@ app.patch('/api/admin/users/:id', requireAdmin, (req, res) => {
     u.coins = Math.max(0, (u.coins || 0) + Math.round(req.body.grantCoins));
     patch.coins = u.coins;
   }
+  if (typeof req.body.grantAutoClaimDays === 'number') {
+    const days = req.body.grantAutoClaimDays;
+    patch.autoClaimUntil = days <= 0 ? null : billing.grantAutoClaim(u, days);
+    patch.autoClaimRequestedAt = null;
+  }
   if (typeof req.body.extendTrialDays === 'number') {
     const base = u.trialEndsAt && u.trialEndsAt > Date.now() ? u.trialEndsAt : Date.now();
     patch.trialEndsAt = base + req.body.extendTrialDays * billing.DAY;
@@ -587,8 +627,21 @@ setTimeout(async () => {
   }
 }, 3000);
 
-// Every minute: renew coin-funded bots, stop the ones that can no longer pay.
+// Every minute: renew coin-funded bots, stop the ones that can no longer pay,
+// and top up anyone paying for auto-claim.
 function billingTick() {
+  try {
+    const claimed = billing.runAutoClaims(db.data.users);
+    if (claimed.length) {
+      db.save();
+      for (const c of claimed) {
+        console.log(`[auto-claim] +${c.added} coins for ${c.user.username} (balance ${c.coins})`);
+      }
+    }
+  } catch (e) {
+    console.error(`[auto-claim] pass failed: ${e.message}`);
+  }
+
   for (const bot of db.listBots()) {
     if (bot.status !== 'running' && !bots.status(bot.id).running) continue;
     const owner = db.findUserById(bot.userId);
