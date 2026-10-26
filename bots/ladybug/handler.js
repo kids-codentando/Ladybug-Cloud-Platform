@@ -1066,7 +1066,7 @@ const handleMessage = async (sock, msg) => {
         return sock.sendMessage(from, {
           text:
             `⭐ *${command.name}* is a premium command.\n\n` +
-            `Unlock the full premium pack (glitch, banner, matrix, vhs, corrupt, typewriter) ` +
+            `Unlock the full premium pack (glitchtext, banner, matrixrain, vhs, corrupt, typewriter) ` +
             `from your Ladybug Cloud dashboard.\n\n` +
             `Already paid? Ask the owner to activate your number.`,
         }, { quoted: msg });

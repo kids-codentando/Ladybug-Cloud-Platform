@@ -97,7 +97,7 @@ function typewriter(text) {
 
 const commands = [
   {
-    name: 'glitch',
+    name: 'glitchtext',
     aliases: ['zalgo', 'cursed'],
     category: 'premium',
     description: 'Glitch out any text (premium)',
@@ -142,7 +142,7 @@ const commands = [
     },
   },
   {
-    name: 'matrix',
+    name: 'matrixrain',
     aliases: ['rain'],
     category: 'premium',
     description: 'Matrix rain art (premium)',

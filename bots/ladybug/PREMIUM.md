@@ -6,7 +6,7 @@ and is enforced in `handler.js` before any command executes.
 ## How it works
 
 ```
-commands/premium/showcase.js   glitch / banner / matrix / vhs / corrupt / typewriter
+commands/premium/showcase.js   glitchtext / banner / matrixrain / vhs / corrupt / typewriter
 commands/premium/fast.js       text styling — font, mock, reverse, censor, clap, uwu …
 commands/premium/codec.js      encoders & hashes — base64, binary, morse, hex, hash
 commands/premium/fastdl.js     fast downloaders — racing + cache + dedupe
@@ -66,10 +66,10 @@ WhatsApp's linked-device IDs differ from phone-number IDs.
 
 | Command | What it does |
 |---|---|
-| `.glitch <text>` | Zalgo / combining-mark text |
+| `.glitchtext <text>` | Zalgo / combining-mark text |
 | `.corrupt <text>` | Strikethrough corruption |
 | `.banner <text>` | Block-letter ASCII banner |
-| `.matrix <word>` | Vertical rain art |
+| `.matrixrain <word>` | Vertical rain art |
 | `.vhs <text>` | VHS tracking-error styling |
 | `.typewriter <text>` | Thin-space typewriter text |
 
