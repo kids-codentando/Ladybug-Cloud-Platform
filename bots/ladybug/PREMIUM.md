@@ -9,8 +9,10 @@ and is enforced in `handler.js` before any command executes.
 commands/premium/showcase.js   glitch / banner / matrix / vhs / corrupt / typewriter
 commands/premium/fast.js       text styling — font, mock, reverse, censor, clap, uwu …
 commands/premium/codec.js      encoders & hashes — base64, binary, morse, hex, hash
+commands/premium/fastdl.js     fast downloaders — racing + cache + dedupe
 commands/owner/premium.js      .premium add / remove / list
 utils/premium.js               JSON store + isPremium() / grant() / revoke()
+utils/fastFetch.js             cache, in-flight dedupe, parallel provider racing
 handler.js                     premium gate (owners bypass)
 ```
 
@@ -31,7 +33,7 @@ WhatsApp's linked-device IDs differ from phone-number IDs.
 .premium list                     active subscribers with days remaining
 ```
 
-## The pack — 27 commands
+## The pack — 35 commands
 
 ### Fast text styling (`fast.js`)
 
@@ -71,9 +73,47 @@ WhatsApp's linked-device IDs differ from phone-number IDs.
 | `.vhs <text>` | VHS tracking-error styling |
 | `.typewriter <text>` | Thin-space typewriter text |
 
+### Fast downloaders (`fastdl.js`)
+
+Built on `utils/fastFetch.js`. Same platforms as the free downloaders, but with a speed
+layer that the free ones don't have.
+
+| Command | What it does |
+|---|---|
+| `.fastdl <url>` | Auto-detects the platform and downloads |
+| `.fasttt <url>` | TikTok |
+| `.fastig <url>` | Instagram |
+| `.fastfb <url>` | Facebook |
+| `.fastx <url>` | Twitter / X |
+| `.fastyt <url>` | YouTube video |
+| `.fastmp3 <url>` | YouTube / Spotify audio |
+| `.fastcache [clear]` | Cache stats, or clear it |
+
+**Why they're faster than the free downloaders:**
+
+| Technique | Effect |
+|---|---|
+| 15-minute URL cache | Repeat links return in **0ms**, zero network calls |
+| In-flight dedupe | 5 people pasting the same link = **1** API request |
+| Parallel provider racing | First provider to answer wins, losers aborted |
+| 12s hard cap per provider | Dead endpoint fails in 12s, not 180s |
+
+Measured on the engine itself:
+
+```
+race      slow(3000ms) vs fast(80ms)  -> 82ms    (37x faster than sequential)
+cache     first 51ms -> second 0ms              (51x)
+dedupe    5 concurrent requests -> 1 call, 120ms
+timeout   dead providers -> fail in 401ms       (vs 180000ms in the free commands)
+```
+
+The free downloaders in `commands/media/` still use the old sequential fallback with
+180-second timeouts. They work, but a dead provider can stall them for three minutes.
+The premium ones don't have that problem.
+
 ## Why these are "fast"
 
-Every command is O(n) string work using Node builtins only — no network calls, no
+The text commands are O(n) string work using Node builtins only — no network calls, no
 `ffmpeg`, no `sharp`, no temp files, no database round-trips. Measured across all 27:
 
 ```
@@ -82,8 +122,8 @@ average   0.119 ms
 slowest   0.41 ms  (.password — CSPRNG + shuffle)
 ```
 
-Nothing exceeds 5ms, so replies land instantly. That is the actual selling point of the
-tier: no "processing…" wait, which is exactly where most WhatsApp bots fall over.
+Nothing exceeds 5ms, so replies land instantly. The downloaders are fast for a different
+reason — see the table above — but the principle is the same: remove every avoidable wait.
 
 ## Adding a paid command
 
