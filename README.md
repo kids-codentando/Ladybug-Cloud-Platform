@@ -23,6 +23,15 @@ Built by **Ntandomods** · Deployable on **Render** in one click.
 
 ---
 
+## 💰 Pricing, trial & coins
+
+- **Free trial:** every new account gets `TRIAL_DAYS` (default **7**) of free hosting for 1 bot. Existing accounts get a fresh trial on first boot after this update.
+- **Daily coins:** each user can claim `CLAIM_COINS` (default **20**) free coins every `CLAIM_COOLDOWN_HOURS` (default 24), capped at `MAX_COINS` (140).
+- **Coin plan:** after the trial a bot costs `BOT_COIN_COST` coins (default **20**) per `BOT_COIN_PERIOD_DAYS` (default **1** day). It renews automatically every minute-check; if the owner can't pay the bot is paused and shows a banner. Claiming daily keeps one bot online for free.
+- **Subscription:** `$3/month` (`SUBSCRIPTION_PRICE_USD`) = unlimited runtime with no coins. Set `PAYMENT_URL` to a payment link (e.g. Stripe Payment Link); the dashboard button appends `client_reference_id=<username>`. After payment the admin presses **+30d sub** on the user in **Admin → Users**.
+
+---
+
 ## 🚀 Deploy on Render
 
 ### Option A — Blueprint (recommended)

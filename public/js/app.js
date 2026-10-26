@@ -50,6 +50,90 @@ function fmtUptime(sec) {
   return [d && `${d}d`, h && `${h}h`, `${m}m`].filter(Boolean).join(' ');
 }
 
+function fmtLeft(ms) {
+  if (ms <= 0) return '0m';
+  const d = Math.floor(ms / 86400000), h = Math.floor((ms % 86400000) / 3600000), m = Math.floor((ms % 3600000) / 60000);
+  return [d && `${d}d`, (d || h) && `${h}h`, `${m}m`].filter(Boolean).join(' ');
+}
+
+/* ---------------------------------------------------------------- wallet */
+function walletHTML(b) {
+  const c = b.config;
+  const now = Date.now();
+  let planTitle, planSub, pct = 0, tone = 'ok';
+  if (b.mode === 'admin') {
+    planTitle = 'Admin'; planSub = 'Unlimited hosting, no coins needed.'; pct = 100;
+  } else if (b.mode === 'subscription') {
+    planTitle = `Subscribed · $${c.priceUsd}/month`;
+    planSub = `Active for <b data-left="${b.subscriptionUntil}">${fmtLeft(b.subscriptionUntil - now)}</b>. Your bot runs without spending coins.`;
+    pct = Math.min(100, ((b.subscriptionUntil - now) / (c.subscriptionDays * 86400000)) * 100);
+  } else if (b.mode === 'trial') {
+    planTitle = `Free trial · ${c.trialDays} days`;
+    planSub = `<b data-left="${b.trialEndsAt}">${fmtLeft(b.trialEndsAt - now)}</b> left. After that a bot costs ${c.botCoinCost} coins ${c.botPeriodDays === 1 ? 'per day' : 'per ' + c.botPeriodDays + ' days'}, or subscribe for $${c.priceUsd}/month.`;
+    pct = Math.max(0, Math.min(100, ((b.trialEndsAt - now) / (c.trialDays * 86400000)) * 100));
+  } else {
+    planTitle = 'Coin plan';
+    planSub = `Your bot costs <b>${c.botCoinCost} coins</b> ${c.botPeriodDays === 1 ? 'per day' : 'per ' + c.botPeriodDays + ' days'}. Claim ${c.claimCoins} free coins every day to keep it online, or subscribe for $${c.priceUsd}/month.`;
+    pct = Math.min(100, (b.coins / c.botCoinCost) * 100); tone = b.coins >= c.botCoinCost ? 'ok' : 'warn';
+  }
+  const claimBtn = b.canClaim
+    ? `<button class="btn btn-primary btn-claim" id="claimBtn">🪙 Claim ${c.claimCoins} free coins</button>`
+    : `<button class="btn btn-claim" disabled id="claimBtn">Next claim in <span data-left="${b.nextClaimAt}">${fmtLeft(b.nextClaimAt - now)}</span></button>`;
+  const sub = b.mode === 'subscription' || b.mode === 'admin' ? '' : (c.paymentUrl
+    ? `<a class="btn" href="${esc(c.paymentUrl)}${c.paymentUrl.includes('?') ? '&' : '?'}client_reference_id=${encodeURIComponent(state.user.username)}" target="_blank" rel="noopener">⭐ Subscribe · $${c.priceUsd}/mo</a>`
+    : `<button class="btn" id="subBtn">⭐ Subscribe · $${c.priceUsd}/mo</button>`);
+  const log = (b.log || []).map((l) => `<div class="log-row"><span>${esc(l.reason)}</span><b class="${l.delta >= 0 ? 'plus' : 'minus'}">${l.delta >= 0 ? '+' : ''}${l.delta}</b></div>`).join('');
+  return `
+  <div class="wallet">
+    <div class="wallet-plan">
+      <div class="k">Your plan</div>
+      <div class="wallet-title">${planTitle}</div>
+      <div class="wallet-sub">${planSub}</div>
+      <div class="meter ${tone}"><span style="width:${pct}%"></span></div>
+    </div>
+    <div class="wallet-coins">
+      <div class="k">Coin balance</div>
+      <div class="coin-big"><span class="coin">🪙</span>${b.coins}<small> / ${c.maxCoins}</small></div>
+      <div class="wallet-actions">${claimBtn}${sub}</div>
+      ${log ? `<details class="coin-log"><summary>Recent activity</summary>${log}</details>` : ''}
+    </div>
+  </div>`;
+}
+
+async function loadWallet() {
+  const el = $('#wallet');
+  if (!el) return;
+  try {
+    const b = await api('/api/billing');
+    state.billing = b;
+    el.innerHTML = walletHTML(b);
+    renderNavCoins();
+    const cb = $('#claimBtn');
+    if (cb && !cb.disabled) cb.onclick = async () => {
+      cb.disabled = true; cb.innerHTML = '<span class="spin"></span>';
+      try {
+        const r = await api('/api/coins/claim', { method: 'POST' });
+        toast(`+${r.added} coins claimed! 🪙`);
+      } catch (e) { toast(e.message, 'err'); }
+      loadWallet();
+    };
+    const sb = $('#subBtn');
+    if (sb) sb.onclick = () => toast('Subscriptions are activated by the admin - contact them to subscribe.', 'ok');
+  } catch (e) { /* ignore */ }
+}
+
+function renderNavCoins() {
+  const chip = $('#navCoins');
+  if (chip && state.billing) chip.textContent = `🪙 ${state.billing.coins}`;
+}
+
+// live countdowns
+setInterval(() => {
+  document.querySelectorAll('[data-left]').forEach((el) => {
+    el.textContent = fmtLeft(Number(el.dataset.left) - Date.now());
+  });
+}, 30000);
+
 /* ---------------------------------------------------------------- router */
 const routes = {
   '/': renderLanding,
@@ -85,6 +169,7 @@ function renderNav() {
       <a href="#/dashboard" class="btn btn-ghost btn-sm">Dashboard</a>
       <a href="#/status" class="btn btn-ghost btn-sm">Status</a>
       ${state.user.isAdmin ? '<a href="#/admin" class="btn btn-ghost btn-sm">Admin</a>' : ''}
+      <a href="#/dashboard" class="coin-chip" id="navCoins" title="Your coins">🪙 ${state.billing ? state.billing.coins : state.user.coins || 0}</a>
       <span class="btn btn-ghost btn-sm hide-sm" style="cursor:default">👤 ${esc(state.user.username)}</span>
       <button class="btn btn-sm" id="logoutBtn">Logout</button>`;
     $('#logoutBtn').onclick = async () => {
@@ -106,9 +191,9 @@ async function renderLanding() {
   <section class="hero">
     <div class="wrap">
       <img src="/img/logo.png" class="hero-logo" alt="Ladybug Mini" />
-      <div class="pill"><span class="dot"></span> Free hosting · Powered by Ntandomods</div>
+      <div class="pill"><span class="dot"></span> 7 days free · then free forever with daily coins</div>
       <h1 class="hero-title">Host your <span class="grad">Ladybug Mini</span><br/>WhatsApp bot in seconds</h1>
-      <p class="lead">Create a free account, paste your session ID, and we run your bot 24/7 in the cloud. No servers, no coding, no cost.</p>
+      <p class="lead">Create a free account, link your WhatsApp number, and we run your bot 24/7 in the cloud. <b>Your first 7 days are free</b>, then keep it online by claiming 20 free coins a day - or go unlimited for $3/month.</p>
       <div class="hero-cta">
         <a href="#/register" class="btn btn-primary">Create Free Account →</a>
         <a href="#/login" class="btn">I already have an account</a>
@@ -124,11 +209,40 @@ async function renderLanding() {
       </div>
       <div class="grid grid-3">
         <div class="card"><span class="ico">🚀</span><h3>Deploy in seconds</h3><p>Paste your session ID and hit start. Your bot connects to WhatsApp instantly — no setup headaches.</p></div>
-        <div class="card"><span class="ico">🆓</span><h3>Free accounts</h3><p>Sign up in under a minute with just a username and password. Your first bot is always free.</p></div>
+        <div class="card"><span class="ico">🆓</span><h3>Free accounts</h3><p>Sign up in under a minute with just a username and password. Your first 7 days are free, and daily coins keep you free after that.</p></div>
         <div class="card"><span class="ico">📊</span><h3>Live logs</h3><p>Watch your bot's console in real time. See exactly what's happening and debug fast.</p></div>
         <div class="card"><span class="ico">♻️</span><h3>Auto-restart</h3><p>If your bot crashes, we bring it back automatically with smart backoff — up to 5 retries.</p></div>
         <div class="card"><span class="ico">🔐</span><h3>Private sessions</h3><p>Every bot runs in its own isolated process and session folder. Your data stays yours.</p></div>
         <div class="card"><span class="ico">🛠️</span><h3>Admin managed</h3><p>Bot code is installed and updated by the admin, so you always run the latest Ladybug Mini.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="pricing">
+    <div class="wrap">
+      <div class="section-title"><h2>Simple pricing</h2><p>Start free. Stay free if you show up daily. Pay $3 if you'd rather not.</p></div>
+      <div class="grid grid-3 pricing">
+        <div class="card price-card">
+          <div class="price-tag">Step 1</div>
+          <h3>Free trial</h3>
+          <div class="price">$0<small> / 7 days</small></div>
+          <ul><li>1 bot, fully hosted</li><li>Live logs &amp; auto-restart</li><li>No card needed</li></ul>
+          <a href="#/register" class="btn btn-block">Start free</a>
+        </div>
+        <div class="card price-card featured">
+          <div class="price-tag hot">Free forever</div>
+          <h3>Daily coins</h3>
+          <div class="price">🪙 20<small> / day, free</small></div>
+          <ul><li>Claim 20 coins every day</li><li>20 coins keep 1 bot online</li><li>Miss a day? Bot pauses until you claim</li></ul>
+          <a href="#/register" class="btn btn-primary btn-block">Create free account</a>
+        </div>
+        <div class="card price-card">
+          <div class="price-tag">No fuss</div>
+          <h3>Unlimited</h3>
+          <div class="price">$3<small> / month</small></div>
+          <ul><li>Bot runs 24/7, no coins</li><li>No daily claiming</li><li>Cancel any time</li></ul>
+          <a href="#/register" class="btn btn-block">Get started</a>
+        </div>
       </div>
     </div>
   </section>
@@ -240,11 +354,13 @@ async function renderDashboard() {
         <button class="btn btn-primary" id="newBotBtn">+ New Bot</button>
       </div>
 
+      <div id="wallet"><div class="wallet skeleton"></div></div>
+
       <div class="stats-row">
         <div class="stat"><div class="k">Total Bots</div><div class="v">${state.bots.length}<span style="font-size:15px;color:var(--muted)"> / ${state.limit}</span></div></div>
         <div class="stat"><div class="k">Running</div><div class="v" style="color:#6ee7a0">${running}</div></div>
         <div class="stat"><div class="k">Stopped</div><div class="v">${state.bots.length - running}</div></div>
-        <div class="stat"><div class="k">Plan</div><div class="v" style="font-size:20px;text-transform:capitalize">${esc(state.user.plan)}</div></div>
+        <div class="stat"><div class="k">Plan</div><div class="v" style="font-size:20px;text-transform:capitalize">${esc(state.user.billingMode === 'coins' ? 'coins' : state.user.billingMode || state.user.plan)}</div></div>
       </div>
 
       <div id="botsGrid" class="grid grid-3">
@@ -262,6 +378,7 @@ async function renderDashboard() {
   $('#newBotBtn').onclick = openNewBot;
   bindBotActions();
   startStatusPolling();
+  loadWallet();
 }
 
 function badge(status) {
@@ -282,6 +399,8 @@ function botCard(b) {
     <div style="font-size:12.5px;color:var(--muted);line-height:1.8">
       ${b.running ? `⏱️ Uptime: ${b.startedAt ? timeAgo(b.startedAt).replace(' ago', '') : '—'}` : `Last: ${b.stoppedAt ? timeAgo(b.stoppedAt) : 'never started'}`}<br/>
       ♻️ Auto-restart: ${b.autoRestart ? 'on' : 'off'} · Restarts: ${b.restarts || 0}
+      ${b.coinPaidUntil && b.coinPaidUntil > Date.now() && b.running ? `<br/>🪙 Paid for <span data-left="${b.coinPaidUntil}">${fmtLeft(b.coinPaidUntil - Date.now())}</span>` : ''}
+      ${b.suspendedReason && !b.running ? `<div class="suspended">⏸️ ${esc(b.suspendedReason)}</div>` : ''}
       ${b.lastError ? `<div style="color:#ff8095;margin-top:6px;font-size:12px">⚠️ ${esc(b.lastError)}</div>` : ''}
     </div>
     <div class="bot-actions">
@@ -331,6 +450,7 @@ async function handleBotAction(id, act, btn) {
     setTimeout(renderDashboard, 700);
   } catch (e) {
     toast(e.message, 'err');
+    loadWallet();
     btn.disabled = false;
     btn.textContent = original;
   }
@@ -701,17 +821,20 @@ async function adminUsers(el) {
     el.innerHTML = `
       <div class="table-wrap">
         <table>
-          <thead><tr><th>User</th><th>Plan</th><th>Bots</th><th>Joined</th><th>Last login</th><th>Actions</th></tr></thead>
+          <thead><tr><th>User</th><th>Plan</th><th>Billing</th><th>Bots</th><th>Joined</th><th>Last login</th><th>Actions</th></tr></thead>
           <tbody>
             ${users.map((u) => `
               <tr>
                 <td><strong>${esc(u.username)}</strong>${u.isAdmin ? ' <span class="badge badge-running" style="font-size:9px">admin</span>' : ''}<br/><span style="color:var(--muted);font-size:12px">${esc(u.email || '—')}</span></td>
                 <td>${esc(u.plan)}</td>
+                <td style="font-size:12.5px">${esc(u.billingMode)}<br/><span style="color:var(--muted)">🪙 ${u.coins}</span></td>
                 <td>${u.botCount} / ${u.botLimit}</td>
                 <td style="color:var(--muted)">${u.createdAt ? new Date(u.createdAt).toLocaleDateString() : '—'}</td>
                 <td style="color:var(--muted)">${u.lastLogin ? timeAgo(new Date(u.lastLogin).getTime()) : 'never'}</td>
                 <td>
                   <button class="btn btn-sm" data-uplan="${u.id}" data-plan="${u.plan === 'pro' ? 'free' : 'pro'}">${u.plan === 'pro' ? 'Downgrade' : 'Upgrade'}</button>
+                  <button class="btn btn-sm btn-green" data-ugrant="${u.id}" data-body='{"grantSubscriptionDays":30}' title="Mark as paid: +30 days">+30d sub</button>
+                  <button class="btn btn-sm" data-ugrant="${u.id}" data-body='{"grantCoins":20}' title="Give 20 coins">+20 🪙</button>
                   ${u.id !== state.user.id ? `<button class="btn btn-sm btn-danger" data-udel="${u.id}">Delete</button>` : ''}
                 </td>
               </tr>`).join('')}
@@ -722,6 +845,13 @@ async function adminUsers(el) {
       try {
         await api(`/api/admin/users/${b.dataset.uplan}`, { method: 'PATCH', body: { plan: b.dataset.plan } });
         toast('Plan updated');
+        adminUsers(el);
+      } catch (e) { toast(e.message, 'err'); }
+    }));
+    $$('[data-ugrant]').forEach((b) => (b.onclick = async () => {
+      try {
+        await api(`/api/admin/users/${b.dataset.ugrant}`, { method: 'PATCH', body: JSON.parse(b.dataset.body) });
+        toast('Updated');
         adminUsers(el);
       } catch (e) { toast(e.message, 'err'); }
     }));

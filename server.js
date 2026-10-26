@@ -18,6 +18,7 @@ const bots = require('./lib/bots');
 const installer = require('./lib/installer');
 const sessiongen = require('./lib/sessiongen');
 const FileSessionStore = require('./lib/session-store');
+const billing = require('./lib/billing');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -83,6 +84,10 @@ function publicUser(u) {
     botLimit: u.botLimit || (u.plan === 'pro' ? PRO_BOT_LIMIT : FREE_BOT_LIMIT),
     createdAt: u.createdAt,
     lastLogin: u.lastLogin || null,
+    billingMode: billing.mode(u),
+    trialEndsAt: u.trialEndsAt || null,
+    subscriptionUntil: u.subscriptionUntil || null,
+    coins: u.coins || 0,
   };
 }
 
@@ -121,6 +126,8 @@ function botView(bot) {
     startedAt: st.startedAt,
     restarts: st.restarts,
     lastError: st.lastError,
+    coinPaidUntil: bot.coinPaidUntil || null,
+    suspendedReason: bot.suspendedReason || null,
   };
 }
 
@@ -145,6 +152,19 @@ function botView(bot) {
   }
 })();
 
+// Existing accounts from before billing existed get a fresh trial from now.
+(function grandfatherUsers() {
+  let n = 0;
+  for (const u of db.data.users) {
+    if (!u.isAdmin && !u.trialEndsAt) {
+      u.trialEndsAt = Date.now() + billing.cfg.trialDays * billing.DAY;
+      n++;
+    }
+    if (typeof u.coins !== 'number') u.coins = 0;
+  }
+  if (n) { db.save(); console.log(`[billing] granted a ${billing.cfg.trialDays}-day trial to ${n} existing user(s)`); }
+})();
+
 // ---------------------------------------------------------------- auth routes
 app.post('/api/auth/register', (req, res) => {
   const { username, email, password } = req.body || {};
@@ -163,6 +183,8 @@ app.post('/api/auth/register', (req, res) => {
     plan: 'free',
     botLimit: FREE_BOT_LIMIT,
     createdAt: new Date().toISOString(),
+    trialEndsAt: Date.now() + billing.cfg.trialDays * billing.DAY,
+    coins: 0,
   };
   db.addUser(user);
   req.session.userId = user.id;
@@ -190,6 +212,20 @@ app.get('/api/auth/me', (req, res) => {
   if (!req.session.userId) return res.json({ user: null });
   const user = db.findUserById(req.session.userId);
   res.json({ user: user ? publicUser(user) : null });
+});
+
+// ---------------------------------------------------------------- billing / coins
+app.get('/api/billing', requireAuth, (req, res) => {
+  res.json(billing.summary(req.user));
+});
+
+app.post('/api/coins/claim', requireAuth, (req, res) => {
+  const r = billing.claim(req.user);
+  if (!r.ok) {
+    return res.status(429).json({ error: 'You already claimed today. Come back later!', nextClaimAt: r.nextClaimAt });
+  }
+  db.save();
+  res.json({ ok: true, ...r, billing: billing.summary(req.user) });
 });
 
 // ---------------------------------------------------------------- user bots
@@ -289,7 +325,11 @@ app.post('/api/bots/:id/start', requireAuth, (req, res) => {
     db.updateBot(twin.id, { status: 'stopped' });
   }
 
-  db.updateBot(bot.id, { status: 'running' });
+  const owner = db.findUserById(bot.userId) || req.user;
+  const auth = billing.authorize(owner, bot);
+  if (!auth.ok) return res.status(402).json({ error: auth.reason, billing: billing.summary(owner) });
+  if (auth.charged) db.save();
+  db.updateBot(bot.id, { status: 'running', suspendedReason: null, ...(auth.until ? { coinPaidUntil: auth.until } : {}) });
   const r = bots.start(db.findBotById(bot.id));
   if (!r.ok) return res.status(400).json({ error: r.error });
   res.json({ ok: true, preparing: !!r.preparing, message: r.message, status: bots.status(bot.id) });
@@ -306,7 +346,11 @@ app.post('/api/bots/:id/stop', requireAuth, (req, res) => {
 app.post('/api/bots/:id/restart', requireAuth, (req, res) => {
   const bot = ownBot(req, res);
   if (!bot) return;
-  db.updateBot(bot.id, { status: 'running' });
+  const owner = db.findUserById(bot.userId) || req.user;
+  const auth = billing.authorize(owner, bot);
+  if (!auth.ok) return res.status(402).json({ error: auth.reason, billing: billing.summary(owner) });
+  if (auth.charged) db.save();
+  db.updateBot(bot.id, { status: 'running', suspendedReason: null, ...(auth.until ? { coinPaidUntil: auth.until } : {}) });
   bots.restart(db.findBotById(bot.id));
   res.json({ ok: true });
 });
@@ -420,6 +464,19 @@ app.patch('/api/admin/users/:id', requireAdmin, (req, res) => {
   }
   if (typeof req.body.botLimit === 'number') patch.botLimit = req.body.botLimit;
   if (typeof req.body.isAdmin === 'boolean') patch.isAdmin = req.body.isAdmin;
+  if (typeof req.body.grantSubscriptionDays === 'number') {
+    const days = req.body.grantSubscriptionDays;
+    const base = u.subscriptionUntil && u.subscriptionUntil > Date.now() ? u.subscriptionUntil : Date.now();
+    patch.subscriptionUntil = days <= 0 ? null : base + days * billing.DAY;
+  }
+  if (typeof req.body.grantCoins === 'number') {
+    u.coins = Math.max(0, (u.coins || 0) + Math.round(req.body.grantCoins));
+    patch.coins = u.coins;
+  }
+  if (typeof req.body.extendTrialDays === 'number') {
+    const base = u.trialEndsAt && u.trialEndsAt > Date.now() ? u.trialEndsAt : Date.now();
+    patch.trialEndsAt = base + req.body.extendTrialDays * billing.DAY;
+  }
   if (req.body.password) patch.passwordHash = bcrypt.hashSync(String(req.body.password), 10);
   db.updateUser(u.id, patch);
   res.json({ ok: true, user: publicUser(db.findUserById(u.id)) });
@@ -527,6 +584,29 @@ setTimeout(async () => {
     bots.start(bot);
   }
 }, 3000);
+
+// Every minute: renew coin-funded bots, stop the ones that can no longer pay.
+function billingTick() {
+  for (const bot of db.listBots()) {
+    if (bot.status !== 'running' && !bots.status(bot.id).running) continue;
+    const owner = db.findUserById(bot.userId);
+    if (!owner) continue;
+    const auth = billing.authorize(owner, bot);
+    if (auth.ok) {
+      if (auth.charged) {
+        db.updateBot(bot.id, { coinPaidUntil: auth.until });
+        db.save();
+        console.log(`[billing] renewed "${bot.name}" for ${owner.username}`);
+      }
+      continue;
+    }
+    console.log(`[billing] stopping "${bot.name}" (${owner.username}): out of coins`);
+    bots.stop(bot.id);
+    db.updateBot(bot.id, { status: 'stopped', suspendedReason: 'Out of coins - claim daily coins or subscribe, then press Start.' });
+  }
+}
+setInterval(billingTick, 60 * 1000).unref();
+setTimeout(billingTick, 5000).unref();
 
 function shutdown() {
   console.log('\n[shutdown] stopping bots...');
