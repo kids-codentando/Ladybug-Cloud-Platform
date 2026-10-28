@@ -129,6 +129,7 @@ function botView(bot) {
     running: st.running,
     pid: st.pid,
     startedAt: st.startedAt,
+    stoppedAt: st.stoppedAt,
     restarts: st.restarts,
     lastError: st.lastError,
     coinPaidUntil: bot.coinPaidUntil || null,
@@ -359,7 +360,8 @@ app.get('/api/messages/unread', requireAuth, (req, res) => {
   const admin = req.user.isAdmin
     ? db.allMessages().filter((m) => m.from === 'user' && !m.readByAdmin).length
     : 0;
-  res.json({ unread: mine, adminUnread: admin });
+  const pendingPayments = req.user.isAdmin ? db.allPayments().filter((x) => x.status === 'pending').length : 0;
+  res.json({ unread: mine, adminUnread: admin, pendingPayments });
 });
 
 app.post('/api/messages', requireAuth, (req, res) => {
@@ -439,6 +441,103 @@ app.post('/api/admin/messages/:userId', requireAdmin, (req, res) => {
 app.delete('/api/admin/messages/:userId', requireAdmin, (req, res) => {
   db.deleteThread(req.params.userId);
   res.json({ ok: true });
+});
+
+// ---------------------------------------------------------------- payment submissions
+// A user reports a transfer ("I paid"); the admin approves it in one click and the
+// plan is switched on automatically, instead of hand-editing the user row.
+const PAY_ITEMS = ['unlimited', 'autoclaim', 'slot'];
+
+function paymentView(x) {
+  const u = db.findUserById(x.userId);
+  return {
+    id: x.id, userId: x.userId, username: u ? u.username : '(deleted)',
+    item: x.item, itemName: x.itemName, qty: x.qty, currency: x.currency, amount: x.amount, amountUsd: x.amountUsd,
+    reference: x.reference, status: x.status, createdAt: x.createdAt, decidedAt: x.decidedAt || null, reason: x.reason || '',
+  };
+}
+
+/** Switch on whatever the user paid for. Returns a short human description. */
+function applyPurchase(u, item, qty) {
+  const at = Date.now();
+  if (item === 'unlimited') {
+    const base = u.subscriptionUntil && u.subscriptionUntil > at ? u.subscriptionUntil : at;
+    u.subscriptionUntil = base + billing.cfg.subscriptionDays * billing.DAY;
+    return `Unlimited for ${billing.cfg.subscriptionDays} days`;
+  }
+  if (item === 'autoclaim') {
+    billing.grantAutoClaim(u, billing.cfg.autoClaimDays);
+    u.autoClaimRequestedAt = null;
+    return `Auto-claim for ${billing.cfg.autoClaimDays} days`;
+  }
+  billing.grantExtraSlots(u, qty, billing.cfg.slotDays);
+  u.slotRequestedAt = null;
+  u.slotRequestedCount = null;
+  return `${qty} extra bot slot${qty > 1 ? 's' : ''} for ${billing.cfg.slotDays} days`;
+}
+
+function notifyUser(userId, body) {
+  db.addMessage({ id: uid(), userId, from: 'admin', body, at: Date.now(), readByAdmin: true, readByUser: false });
+}
+
+app.get('/api/payments/mine', requireAuth, (req, res) => {
+  const mine = db.allPayments().filter((x) => x.userId === req.user.id).slice(-10).reverse();
+  res.json({ payments: mine.map(paymentView) });
+});
+
+app.post('/api/payments/submit', requireAuth, (req, res) => {
+  const b = req.body || {};
+  const item = String(b.item || '');
+  if (!PAY_ITEMS.includes(item)) return res.status(400).json({ error: 'Choose what you paid for.' });
+  const qty = item === 'slot' ? Math.max(1, Math.min(5, parseInt(b.qty, 10) || 1)) : 1;
+  const cfgPay = payments.get();
+  const currency = cfgPay.accounts.map((a) => a.currency).find((c) => c.toLowerCase() === String(b.currency || '').toLowerCase());
+  if (!currency) return res.status(400).json({ error: 'Choose the currency you paid in.' });
+  const reference = String(b.reference || '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, 80);
+  if (reference.length < 3) return res.status(400).json({ error: 'Enter the transaction reference or the name/number you paid from.' });
+  const pending = db.allPayments().filter((x) => x.userId === req.user.id && x.status === 'pending');
+  if (pending.length >= 3) return res.status(429).json({ error: 'You already have 3 payments waiting for approval.' });
+  const price = payments.prices().items.find((i) => i.key === item);
+  const usd = price.usd * qty;
+  const amount = currency.toLowerCase() === 'zig' ? payments.toZig(usd) : usd;
+  const rec = db.addPayment({
+    id: uid(), userId: req.user.id, item, itemName: price.name, qty, currency, amount, amountUsd: usd,
+    reference, status: 'pending', createdAt: Date.now(),
+  });
+  res.json({ ok: true, payment: paymentView(rec) });
+});
+
+app.get('/api/admin/payment-requests', requireAdmin, (req, res) => {
+  const all = db.allPayments().slice().reverse();
+  const pending = all.filter((x) => x.status === 'pending').map(paymentView).reverse(); // oldest first
+  res.json({ pending, recent: all.filter((x) => x.status !== 'pending').slice(0, 15).map(paymentView) });
+});
+
+app.post('/api/admin/payment-requests/:id/approve', requireAdmin, (req, res) => {
+  const x = db.findPayment(req.params.id);
+  if (!x) return res.status(404).json({ error: 'Payment not found' });
+  if (x.status !== 'pending') return res.status(409).json({ error: `Already ${x.status}.` });
+  const u = db.findUserById(x.userId);
+  if (!u) return res.status(404).json({ error: 'User no longer exists' });
+  const what = applyPurchase(u, x.item, x.qty);
+  x.status = 'approved';
+  x.decidedAt = Date.now();
+  notifyUser(u.id, `Payment confirmed (${x.currency} ${x.amount}, ref ${x.reference}). Activated: ${what}. Thank you!`);
+  db.save();
+  res.json({ ok: true, payment: paymentView(x), activated: what });
+});
+
+app.post('/api/admin/payment-requests/:id/reject', requireAdmin, (req, res) => {
+  const x = db.findPayment(req.params.id);
+  if (!x) return res.status(404).json({ error: 'Payment not found' });
+  if (x.status !== 'pending') return res.status(409).json({ error: `Already ${x.status}.` });
+  const reason = String((req.body && req.body.reason) || '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, 200);
+  x.status = 'rejected';
+  x.decidedAt = Date.now();
+  x.reason = reason;
+  notifyUser(x.userId, `We could not confirm your payment (${x.currency} ${x.amount}, ref ${x.reference}).${reason ? ' Reason: ' + reason : ''} Reply here if you need help.`);
+  db.save();
+  res.json({ ok: true, payment: paymentView(x) });
 });
 
 // ---------------------------------------------------------------- user bots

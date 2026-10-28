@@ -68,10 +68,11 @@ async function refreshUnread() {
     const r = await api('/api/messages/unread');
     state.unread = r.unread || 0;
     state.adminUnread = r.adminUnread || 0;
+    state.pendingPayments = r.pendingPayments || 0;
   } catch (e) { /* ignore */ }
   const n = $('#navMsgN');
   if (n) {
-    const total = (state.unread || 0) + (state.adminUnread || 0);
+    const total = (state.unread || 0) + (state.adminUnread || 0) + (state.pendingPayments || 0);
     n.textContent = total; n.style.display = total ? '' : 'none';
   }
 }
@@ -221,6 +222,11 @@ function renderNavCoins() {
 }
 
 // live countdowns
+setInterval(() => {
+  document.querySelectorAll('[data-since]').forEach((el) => {
+    el.textContent = fmtLeft(Date.now() - Number(el.dataset.since));
+  });
+}, 1000);
 setInterval(() => {
   document.querySelectorAll('[data-left]').forEach((el) => {
     el.textContent = fmtLeft(Number(el.dataset.left) - Date.now());
@@ -813,31 +819,48 @@ function badge(status) {
 }
 
 function botCard(b) {
-  const paid = b.coinPaidUntil && b.coinPaidUntil > Date.now() && b.running;
+  const now = Date.now();
+  const paid = b.coinPaidUntil && b.coinPaidUntil > now && b.running;
+  const live = b.status === 'running';
+  const initial = esc((b.name || '?').trim().charAt(0).toUpperCase() || '?');
+  const uptime = live && b.startedAt
+    ? `<span data-since="${b.startedAt}">${fmtLeft(now - b.startedAt)}</span>`
+    : (b.stoppedAt ? `<span class="muted-v">stopped ${timeAgo(b.stoppedAt)}</span>` : '<span class="muted-v">not started yet</span>');
+  const cover = paid
+    ? `<div class="bot-cover"><div class="bot-cover-top"><span>Coins cover</span><b data-left="${b.coinPaidUntil}">${fmtLeft(b.coinPaidUntil - now)}</b></div>
+         <div class="meter ok"><span style="width:${Math.max(4, Math.min(100, ((b.coinPaidUntil - now) / 86400000) * 100))}%"></span></div></div>`
+    : '';
   return `
-  <div class="bot-card" data-id="${b.id}">
+  <div class="bot-card is-${b.status}" data-id="${b.id}">
     <div class="bot-top">
-      <div>
+      <div class="bot-ava"><span>${initial}</span><i class="bot-dot ${b.status}"></i></div>
+      <div class="bot-id">
         <div class="bot-name">${esc(b.name)}</div>
         <div class="bot-meta">${b.hasSession ? esc(b.sessionIdMasked) : 'No session linked'}</div>
       </div>
       ${badge(b.status)}
     </div>
-    <div class="bot-info">
-      <div><span>${b.running ? 'Uptime' : 'Last stopped'}</span><b>${b.running ? (b.startedAt ? timeAgo(b.startedAt).replace(' ago', '') : '-') : (b.stoppedAt ? timeAgo(b.stoppedAt) : 'Never started')}</b></div>
-      <div><span>Auto-restart</span><b>${b.autoRestart ? 'On' : 'Off'}${b.restarts ? ` (${b.restarts} restarts)` : ''}</b></div>
-      ${paid ? `<div><span>Coins cover</span><b data-left="${b.coinPaidUntil}">${fmtLeft(b.coinPaidUntil - Date.now())}</b></div>` : ''}
+    <div class="bot-hero">
+      <div class="bot-hero-k">${live ? 'Online for' : 'Status'}</div>
+      <div class="bot-hero-v">${uptime}</div>
     </div>
+    <div class="bot-chips">
+      <span class="chip ${b.autoRestart ? 'on' : ''}" title="Restarts itself if it crashes">Auto-restart ${b.autoRestart ? 'on' : 'off'}</span>
+      <span class="chip ${b.restarts ? 'warn' : ''}">${b.restarts || 0} restart${b.restarts === 1 ? '' : 's'}</span>
+      ${b.pid && live ? `<span class="chip">PID ${b.pid}</span>` : ''}
+    </div>
+    ${cover}
     ${b.suspendedReason && !b.running ? `<div class="suspended">${esc(b.suspendedReason)}</div>` : ''}
-    ${b.lastError ? `<div class="suspended" style="color:#ff8f86;background:var(--red-soft);border-color:rgba(226,59,46,.35)">${esc(b.lastError)}</div>` : ''}
+    ${b.lastError ? `<div class="suspended is-err">${esc(b.lastError)}</div>` : ''}
     <div class="bot-actions">
-      ${b.running
-        ? `<button class="btn btn-sm btn-danger" data-act="stop">Stop</button>
-           <button class="btn btn-sm" data-act="restart">Restart</button>`
-        : `<button class="btn btn-sm btn-primary" data-act="start">Start</button>`}
-      <button class="btn btn-sm" data-act="logs">Logs</button>
-      <button class="btn btn-sm btn-ghost" data-act="edit">Edit</button>
-      <button class="btn btn-sm btn-ghost btn-danger" data-act="delete">Delete</button>
+      ${live
+        ? `<button class="btn btn-danger-solid" data-act="stop">Stop</button>
+           <button class="btn" data-act="restart">Restart</button>`
+        : `<button class="btn btn-primary" data-act="start">${b.status === 'starting' || b.status === 'stopping' ? '...' : 'Start bot'}</button>`}
+      <button class="btn btn-ghost" data-act="logs">Logs</button>
+      <span class="bot-actions-spacer"></span>
+      <button class="btn btn-ghost btn-icon" data-act="edit" title="Edit bot">Edit</button>
+      <button class="btn btn-ghost btn-icon btn-danger" data-act="delete" title="Delete bot">Delete</button>
     </div>
   </div>`;
 }
@@ -1200,7 +1223,7 @@ async function renderAdmin() {
         <button class="tab" data-tab="users">Users</button>
         <button class="tab" data-tab="bots">All Bots</button>
         <button class="tab" data-tab="inbox">Inbox${state.adminUnread ? ` <span class="msg-n">${state.adminUnread}</span>` : ''}</button>
-        <button class="tab" data-tab="payments">Payments</button>
+        <button class="tab" data-tab="payments">Payments${state.pendingPayments ? ` <span class="msg-n">${state.pendingPayments}</span>` : ''}</button>
         <button class="tab" data-tab="installer">Bot Installer</button>
       </div>
       <div id="adminBody"></div>
@@ -1468,7 +1491,7 @@ async function renderPay() {
   <div class="app"><div class="wrap">
     <div class="app-head">
       <div><h1>Pay &amp; prices</h1><p>Pay the admin by bank transfer in USD or ZiG.</p></div>
-      <a class="btn btn-primary" href="#/support">I have paid - contact admin</a>
+      <a class="btn" href="#/support">Contact admin</a>
     </div>
     <div class="pay-grid">
       <div class="card">
@@ -1486,8 +1509,57 @@ async function renderPay() {
         </table></div>
         <p class="pay-note">ZiG prices use a rate of <b>1 USD = ZiG ${p.zigPerUsd}</b>. The admin updates the rate when the market moves, so always check this page before you send money.</p>
       </div>
+      <form class="card" id="paidForm">
+        <h3>I have paid</h3>
+        <p class="pay-note" style="margin:0 0 14px">Sent the money? Tell us what it was for. The admin checks the transfer and switches your plan on.</p>
+        <div class="field"><label>What did you pay for?</label>
+          <select class="input" id="fItem">${p.items.map((i) => `<option value="${i.key}">${esc(i.name)} - $${i.usd} / ZiG ${i.zig.toFixed(2)}</option>`).join('')}</select></div>
+        <div class="field" id="fQtyWrap" style="display:none"><label>How many slots?</label>
+          <input class="input" id="fQty" type="number" min="1" max="5" value="1" /></div>
+        <div class="field"><label>Currency you paid in</label>
+          <select class="input" id="fCur">${p.accounts.map((a) => `<option value="${esc(a.currency)}">${esc(a.currency)}</option>`).join('')}</select></div>
+        <div class="field"><label>Transaction reference or sender name</label>
+          <input class="input" id="fRef" maxlength="80" placeholder="e.g. bank receipt number" /></div>
+        <div class="paid-total" id="fTotal"></div>
+        <button class="btn btn-primary btn-block" type="submit">Submit payment</button>
+      </form>
+      <div class="card">
+        <h3>My payments</h3>
+        <div id="myPays" class="pay-list"><div class="chat-empty">Loading...</div></div>
+      </div>
     </div>
   </div></div>`;
+  const items = p.items;
+  const total = () => {
+    const it = items.find((i) => i.key === $('#fItem').value);
+    const qty = it.key === 'slot' ? Math.max(1, Math.min(5, parseInt($('#fQty').value, 10) || 1)) : 1;
+    $('#fQtyWrap').style.display = it.key === 'slot' ? '' : 'none';
+    const cur = $('#fCur').value;
+    const amt = cur.toLowerCase() === 'zig' ? 'ZiG ' + (it.zig * qty).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '$' + it.usd * qty;
+    $('#fTotal').innerHTML = `Amount to send: <b>${esc(amt)}</b>`;
+  };
+  ['fItem', 'fQty', 'fCur'].forEach((id) => { $('#' + id).oninput = total; $('#' + id).onchange = total; });
+  total();
+  const loadMine = async () => {
+    try {
+      const r = await api('/api/payments/mine');
+      $('#myPays').innerHTML = r.payments.length ? r.payments.map((x) => `
+        <div class="pay-item"><div><b>${esc(x.itemName)}${x.qty > 1 ? ' x' + x.qty : ''}</b><br/><span class="pay-sub">${esc(x.currency)} ${x.amount} - ref ${esc(x.reference)} - ${timeAgo(x.createdAt)}</span>${x.reason ? `<br/><span class="pay-sub">${esc(x.reason)}</span>` : ''}</div>
+        <span class="pstatus ${x.status}">${x.status}</span></div>`).join('') : '<div class="chat-empty">Nothing submitted yet.</div>';
+    } catch (e) { /* ignore */ }
+  };
+  loadMine();
+  $('#paidForm').onsubmit = async (ev) => {
+    ev.preventDefault();
+    const btn = $('#paidForm button[type=submit]'); btn.disabled = true;
+    try {
+      await api('/api/payments/submit', { method: 'POST', body: { item: $('#fItem').value, qty: $('#fQty').value, currency: $('#fCur').value, reference: $('#fRef').value } });
+      toast('Submitted - the admin will confirm it soon');
+      $('#fRef').value = '';
+      loadMine();
+    } catch (e) { toast(e.message, 'err'); }
+    btn.disabled = false;
+  };
   $$('[data-copy]').forEach((b) => (b.onclick = async () => {
     try { await navigator.clipboard.writeText(b.dataset.copy); toast('Copied'); } catch (e) { toast('Copy failed - select the text instead', 'err'); }
   }));
@@ -1610,7 +1682,18 @@ async function adminPayments(el) {
     const acctRow = (a = { currency: '', number: '' }) => `
       <div class="acct-edit"><input class="input" data-cur placeholder="Currency (ZiG)" value="${esc(a.currency)}" style="max-width:120px" />
       <input class="input" data-num placeholder="Account number" value="${esc(a.number)}" /></div>`;
+    const pr = await api('/api/admin/payment-requests');
+    const payRow = (x, actions) => `
+      <div class="pay-item"><div><b>${esc(x.username)}</b> - ${esc(x.itemName)}${x.qty > 1 ? ' x' + x.qty : ''}<br/>
+        <span class="pay-sub">${esc(x.currency)} ${x.amount} (US$${x.amountUsd}) - ref ${esc(x.reference)} - ${timeAgo(x.createdAt)}</span>${x.reason ? `<br/><span class="pay-sub">${esc(x.reason)}</span>` : ''}</div>
+        ${actions || `<span class="pstatus ${x.status}">${x.status}</span>`}</div>`;
     el.innerHTML = `
+    <div class="card" style="margin-bottom:18px">
+      <h3>Payments waiting for approval ${pr.pending.length ? `<span class="msg-n">${pr.pending.length}</span>` : ''}</h3>
+      <p class="pay-note" style="margin:0 0 10px">Check the money in your NSB account first, then approve. Approving switches the plan on and messages the user.</p>
+      <div class="pay-list">${pr.pending.length ? pr.pending.map((x) => payRow(x, `<span class="pay-btns"><button class="btn btn-sm btn-green" data-approve="${x.id}">Approve</button><button class="btn btn-sm btn-danger" data-reject="${x.id}">Reject</button></span>`)).join('') : '<div class="chat-empty">Nothing waiting.</div>'}</div>
+      ${pr.recent.length ? `<details class="coin-log"><summary>Recent decisions</summary>${pr.recent.map((x) => payRow(x)).join('')}</details>` : ''}
+    </div>
     <div class="pay-grid">
       <form class="card" id="payForm">
         <h3>Payment details shown to users</h3>
@@ -1632,6 +1715,17 @@ async function adminPayments(el) {
         <p class="pay-note">USD prices come from the server settings (SUBSCRIPTION_PRICE_USD, AUTOCLAIM_PRICE_USD, SLOT_PRICE_USD). ZiG = USD x rate.</p>
       </div>
     </div>`;
+    $$('[data-approve]').forEach((b) => (b.onclick = async () => {
+      b.disabled = true;
+      try { const r = await api(`/api/admin/payment-requests/${b.dataset.approve}/approve`, { method: 'POST' }); toast('Activated: ' + r.activated); refreshUnread(); adminPayments(el); }
+      catch (e) { toast(e.message, 'err'); b.disabled = false; }
+    }));
+    $$('[data-reject]').forEach((b) => (b.onclick = async () => {
+      const reason = prompt('Reason for rejecting (shown to the user, optional):');
+      if (reason === null) return;
+      try { await api(`/api/admin/payment-requests/${b.dataset.reject}/reject`, { method: 'POST', body: { reason } }); toast('Rejected'); refreshUnread(); adminPayments(el); }
+      catch (e) { toast(e.message, 'err'); }
+    }));
     $('#addAcct').onclick = () => { $('#acctRows').insertAdjacentHTML('beforeend', acctRow()); };
     $('#payForm').onsubmit = async (ev) => {
       ev.preventDefault();
