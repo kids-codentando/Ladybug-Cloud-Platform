@@ -180,6 +180,18 @@ app.post('/api/auth/register', (req, res) => {
   if (db.findUserByUsername(username)) return res.status(409).json({ error: 'Username already taken' });
   if (email && db.findUserByEmail(email)) return res.status(409).json({ error: 'Email already registered' });
 
+  // Referral: `ref` is the inviter's username. Self-referral and shared-IP signups earn nothing.
+  const regIp = String(req.ip || '');
+  let referrer = null;
+  const refName = String((req.body && req.body.ref) || '').trim().slice(0, 40);
+  if (refName) {
+    const r = db.findUserByUsername(refName);
+    if (r && !r.isAdmin && r.username.toLowerCase() !== String(username).trim().toLowerCase()) referrer = r;
+  }
+  const sameIp = !!(referrer && referrer.regIp && regIp && referrer.regIp === regIp);
+  const ipWelcomes = db.data.users.filter((u) => u.regIp === regIp && u.referralWelcome).length;
+  const welcome = !!referrer && !sameIp && ipWelcomes < 3;
+
   const user = {
     id: uid(),
     username: String(username).trim(),
@@ -191,7 +203,15 @@ app.post('/api/auth/register', (req, res) => {
     createdAt: new Date().toISOString(),
     trialEndsAt: Date.now() + billing.cfg.trialDays * billing.DAY,
     coins: 0,
+    regIp,
+    ...(referrer ? {
+      referredBy: referrer.id,
+      referralStatus: sameIp ? 'blocked' : 'pending',
+      referralNote: sameIp ? 'Same network as the referrer' : '',
+      referralWelcome: welcome,
+    } : {}),
   };
+  if (welcome) billing.grantBonus(user, billing.cfg.refFriendCoins, 'Welcome bonus (invited by ' + referrer.username + ')');
   db.addUser(user);
   req.session.userId = user.id;
   res.json({ ok: true, user: publicUser(user) });
@@ -543,6 +563,79 @@ app.post('/api/admin/payment-requests/:id/reject', requireAdmin, (req, res) => {
   db.save();
   res.json({ ok: true, payment: paymentView(x) });
 });
+
+// ---------------------------------------------------------------- referrals
+const REF_MIN_MS = () => billing.cfg.refMinUptimeMin * 60 * 1000;
+
+function maskName(n) {
+  n = String(n || '');
+  return n.slice(0, 2) + '*'.repeat(Math.max(2, Math.min(6, n.length - 2)));
+}
+
+app.get('/api/referrals', requireAuth, (req, res) => {
+  const mine = db.data.users.filter((u) => u.referredBy === req.user.id);
+  const monthAgo = Date.now() - 30 * billing.DAY;
+  const rewardedMonth = mine.filter((u) => u.referralStatus === 'rewarded' && u.referralRewardedAt > monthAgo).length;
+  res.json({
+    code: req.user.username,
+    referrerCoins: billing.cfg.refReferrerCoins,
+    friendCoins: billing.cfg.refFriendCoins,
+    minUptimeMin: billing.cfg.refMinUptimeMin,
+    cap: billing.cfg.refMonthlyCap,
+    rewardedMonth,
+    invited: mine.length,
+    earned: mine.filter((u) => u.referralStatus === 'rewarded').length * billing.cfg.refReferrerCoins,
+    friends: mine.slice(-20).reverse().map((u) => ({
+      name: maskName(u.username),
+      status: u.referralStatus === 'rewarded' ? 'rewarded' : u.referralStatus === 'blocked' ? 'blocked' : 'waiting',
+      at: u.createdAt,
+    })),
+  });
+});
+
+app.get('/api/admin/referrals', requireAdmin, (req, res) => {
+  const rows = db.data.users.filter((u) => u.referredBy).map((u) => {
+    const r = db.findUserById(u.referredBy);
+    return {
+      username: u.username, referrer: r ? r.username : '(deleted)', status: u.referralStatus || 'pending',
+      note: u.referralNote || '', joined: u.createdAt, rewardedAt: u.referralRewardedAt || null, welcome: !!u.referralWelcome,
+    };
+  }).reverse();
+  res.json({
+    referrals: rows,
+    rewarded: rows.filter((x) => x.status === 'rewarded').length,
+    coinsGiven: rows.filter((x) => x.status === 'rewarded').length * billing.cfg.refReferrerCoins + rows.filter((x) => x.welcome).length * billing.cfg.refFriendCoins,
+  });
+});
+
+/** Pay the referrer once the invited friend's bot has really been online for a while. */
+function referralTick() {
+  let changed = false;
+  for (const u of db.data.users) {
+    if (!u.referredBy || u.referralStatus !== 'pending') continue;
+    const ref = db.findUserById(u.referredBy);
+    if (!ref) { u.referralStatus = 'blocked'; u.referralNote = 'Referrer deleted'; changed = true; continue; }
+    const myBots = db.botsForUser(u.id);
+    const qualified = myBots.find((b) => {
+      if (!b.sessionId) return false;
+      const st = bots.status(b.id);
+      return st.running && st.status === 'running' && st.startedAt && Date.now() - st.startedAt >= REF_MIN_MS();
+    });
+    if (!qualified) continue;
+    // same WhatsApp session as one of the referrer's bots = same person
+    const refSessions = new Set(db.botsForUser(ref.id).map((b) => b.sessionId).filter(Boolean));
+    if (refSessions.has(qualified.sessionId)) { u.referralStatus = 'blocked'; u.referralNote = 'Same WhatsApp session as the referrer'; changed = true; continue; }
+    const monthAgo = Date.now() - 30 * billing.DAY;
+    const doneMonth = db.data.users.filter((x) => x.referredBy === ref.id && x.referralStatus === 'rewarded' && x.referralRewardedAt > monthAgo).length;
+    if (doneMonth >= billing.cfg.refMonthlyCap) continue; // stays pending until the window frees up
+    billing.grantBonus(ref, billing.cfg.refReferrerCoins, `Referral reward (${maskName(u.username)})`);
+    u.referralStatus = 'rewarded';
+    u.referralRewardedAt = Date.now();
+    notifyUser(ref.id, `Your friend ${maskName(u.username)} got their bot online. You earned ${billing.cfg.refReferrerCoins} bonus coins. Thanks for spreading the word!`);
+    changed = true;
+  }
+  if (changed) db.save();
+}
 
 // ---------------------------------------------------------------- user bots
 app.get('/api/bots', requireAuth, (req, res) => {
@@ -961,6 +1054,7 @@ function billingTick() {
   }
 }
 setInterval(billingTick, 60 * 1000).unref();
+setInterval(() => { try { referralTick(); } catch (e) { console.error('[referral]', e.message); } }, 60 * 1000).unref();
 setTimeout(billingTick, 5000).unref();
 
 function shutdown() {

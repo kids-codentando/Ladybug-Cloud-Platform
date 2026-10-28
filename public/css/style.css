@@ -843,3 +843,20 @@ body[data-page]:not([data-page="/"]):not([data-page="/pricing"])::before{
 .hero .orb{opacity:.35}
 .section{background:linear-gradient(180deg,rgba(13,11,11,.55),rgba(13,11,11,.35))}
 @media(max-width:760px){body::before{background-position:78% center}}
+
+
+/* ---- referrals ---- */
+.referral{display:grid;grid-template-columns:1.4fr 1fr;gap:24px;margin:0 0 26px;padding:24px;border-radius:var(--r-lg);border:1px solid rgba(240,180,58,.28);background:linear-gradient(135deg,rgba(240,180,58,.08),var(--surface) 55%)}
+.referral .k{font-size:12px;text-transform:uppercase;letter-spacing:.08em;font-weight:700;color:var(--coin)}
+.referral h3{font-size:21px;margin:6px 0 8px}
+.referral p{margin:0 0 14px;color:var(--muted);font-size:14px}
+.referral p b{color:var(--text)}
+.ref-link{display:flex;gap:8px;flex-wrap:wrap}
+.ref-link .input{flex:1;min-width:200px;font-family:var(--mono);font-size:12.5px}
+.ref-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}
+.ref-stats div{padding:10px;border-radius:var(--r-sm);background:rgba(0,0,0,.28);border:1px solid var(--line);text-align:center}
+.ref-stats b{display:block;font:700 22px var(--display);font-variant-numeric:tabular-nums}
+.ref-stats span{font-size:11.5px;color:var(--muted)}
+.ref-friend{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--line);font-size:13.5px;font-family:var(--mono)}
+.ref-banner{margin:0 0 16px;padding:11px 14px;border-radius:var(--r-sm);background:var(--warn-soft);border:1px solid rgba(240,180,58,.3);color:var(--warn);font-size:14px}
+@media(max-width:820px){.referral{grid-template-columns:1fr}}

@@ -250,6 +250,8 @@ const routes = {
 async function navigate() {
   const hash = location.hash.replace('#', '') || '/';
   const path = hash.split('?')[0];
+  const refM = /[?&]ref=([^&]+)/.exec(hash);
+  if (refM) { try { localStorage.setItem('lb_ref', decodeURIComponent(refM[1]).slice(0, 40)); } catch (e) { /* ignore */ } }
   if (state.logTimer) { clearInterval(state.logTimer); state.logTimer = null; }
 
   // refresh session
@@ -601,6 +603,7 @@ async function renderLanding() {
         <details><summary>What if I forget to claim?</summary><p>If your balance cannot cover the next day, the bot pauses and shows a notice on your dashboard. Claim your coins and press Start to bring it back. Your settings and session stay saved.</p></details>
         <details><summary>What is auto-claim?</summary><p>A $2/month add-on that claims your free coins for you. You still pay for hosting in coins, but you never have to remember the daily tap — so a busy day can't pause your bot. If you already pay for Unlimited, auto-claim is pointless and the dashboard will tell you so.</p></details>
         <details><summary>How do I run two bots?</summary><p>Each extra bot slot is $1/month and stacks on whatever plan you are on, including the free trial. Buy as many as you need from your dashboard — they all renew together and quietly expire if you stop paying, so there is nothing to cancel.</p></details>
+        <details><summary>How do referrals work?</summary><p>Share your personal link from your dashboard. Your friend gets 20 bonus coins when they sign up, and you get 40 bonus coins once their bot has been online for 10 minutes. You can earn up to 10 rewards a month, and bonus coins never expire. Signing up yourself with a second account does not count.</p></details>
         <details><summary>Can I buy more coins?</summary><p>Yes. Coin packs start at $1 for 100 coins (5 days of hosting for one bot). Bought coins never expire, are not limited by the 140-coin cap, and are only spent after your free daily coins run out.</p></details>
         <details><summary>Can I stack coins?</summary><p>Yes, up to 140. That is a week of hosting if you want to claim less often.</p></details>
         <details><summary>How do I pay the $${price} a month?</summary><p>Pay in USD or ZiG by bank transfer to the NSB accounts listed on the Pay page once you are signed in, then message the admin from your dashboard with your proof of payment. Once your payment is confirmed, your account switches to Unlimited.</p></details>
@@ -712,6 +715,10 @@ function initLanding() {
 
 
 /* ---------------------------------------------------------------- auth */
+function savedRef() {
+  try { return localStorage.getItem('lb_ref') || ''; } catch (e) { return ''; }
+}
+
 function authForm(mode) {
   const isLogin = mode === 'login';
   return `
@@ -720,6 +727,7 @@ function authForm(mode) {
       <img src="/img/logo.png" alt="Ladybug" />
       <h2>${isLogin ? 'Welcome back' : 'Start your free trial'}</h2>
       <p class="sub">${isLogin ? 'Log in to manage your bot.' : '7 days of hosting for one bot. No card needed.'}</p>
+      ${!isLogin && savedRef() ? `<div class="ref-banner">You were invited by <b>${esc(savedRef())}</b>. Sign up and get <b>20 bonus coins</b>.</div>` : ''}
       <div class="alert alert-error" id="err"></div>
       <form id="authForm">
         <div class="field">
@@ -764,7 +772,9 @@ function bindAuth(mode) {
     try {
       const fd = new FormData(form);
       const body = Object.fromEntries(fd.entries());
+      if (mode === 'register' && savedRef()) body.ref = savedRef();
       await api(`/api/auth/${mode}`, { method: 'POST', body });
+      if (mode === 'register') { try { localStorage.removeItem('lb_ref'); } catch (e) { /* ignore */ } }
       toast(mode === 'login' ? 'Welcome back!' : 'Account created!');
       location.hash = '#/dashboard';
     } catch (ex) {
@@ -798,6 +808,7 @@ async function renderDashboard() {
       </div>
 
       <div id="wallet"><div class="wallet skeleton"></div></div>
+      <div id="referral"></div>
 
       <div class="stats-row">
         <div class="stat"><div class="k">Bots</div><div class="v">${state.bots.length}<span style="font-size:15px;color:var(--muted);font-weight:500"> of ${state.limit}</span></div></div>
@@ -822,6 +833,37 @@ async function renderDashboard() {
   bindBotActions();
   startStatusPolling();
   loadWallet();
+  loadReferral();
+}
+
+async function loadReferral() {
+  const el = $('#referral');
+  if (!el) return;
+  try {
+    const r = await api('/api/referrals');
+    const link = `${location.origin}/#/register?ref=${encodeURIComponent(r.code)}`;
+    const msg = `I host my WhatsApp bot on Ladybug Cloud - 7 days free. Join with my link and get ${r.friendCoins} bonus coins: ${link}`;
+    const wa = `https://wa.me/?text=${encodeURIComponent(msg)}`;
+    const status = { rewarded: 'Rewarded', waiting: 'Waiting for their bot', blocked: 'Not eligible' };
+    el.innerHTML = `
+    <div class="referral">
+      <div class="referral-main">
+        <div class="k">Invite friends, earn coins</div>
+        <h3>Get ${r.referrerCoins} coins for every friend who gets a bot online</h3>
+        <p>Your friend gets <b>${r.friendCoins} coins</b> when they sign up. You get <b>${r.referrerCoins} coins</b> (about ${Math.round(r.referrerCoins / 20)} days of hosting) once their bot has run for ${r.minUptimeMin} minutes. Up to ${r.cap} rewards a month.</p>
+        <div class="ref-link"><input class="input" readonly value="${esc(link)}" id="refLink" />
+          <button class="btn" id="refCopy">Copy</button>
+          <a class="btn btn-primary" href="${esc(wa)}" target="_blank" rel="noopener">Share on WhatsApp</a></div>
+      </div>
+      <div class="referral-side">
+        <div class="ref-stats"><div><b>${r.invited}</b><span>invited</span></div><div><b>${r.earned}</b><span>coins earned</span></div><div><b>${r.rewardedMonth}/${r.cap}</b><span>this month</span></div></div>
+        ${r.friends.length ? `<div class="ref-friends">${r.friends.slice(0, 5).map((f) => `<div class="ref-friend"><span>${esc(f.name)}</span><span class="pstatus ${f.status === 'rewarded' ? 'approved' : f.status === 'blocked' ? 'rejected' : 'pending'}">${status[f.status]}</span></div>`).join('')}</div>` : '<p class="pay-note" style="margin:0">No invites yet. Share your link to start earning.</p>'}
+      </div>
+    </div>`;
+    $('#refCopy').onclick = async () => {
+      try { await navigator.clipboard.writeText(link); toast('Link copied'); } catch (e) { $('#refLink').select(); toast('Press Ctrl+C to copy', 'ok'); }
+    };
+  } catch (e) { /* ignore */ }
 }
 
 function badge(status) {
@@ -1234,6 +1276,7 @@ async function renderAdmin() {
         <button class="tab" data-tab="users">Users</button>
         <button class="tab" data-tab="bots">All Bots</button>
         <button class="tab" data-tab="inbox">Inbox${state.adminUnread ? ` <span class="msg-n">${state.adminUnread}</span>` : ''}</button>
+        <button class="tab" data-tab="referrals">Referrals</button>
         <button class="tab" data-tab="payments">Payments${state.pendingPayments ? ` <span class="msg-n">${state.pendingPayments}</span>` : ''}</button>
         <button class="tab" data-tab="installer">Bot Installer</button>
       </div>
@@ -1254,6 +1297,7 @@ function adminTabs() {
   if (state.adminTab === 'users') adminUsers(body);
   if (state.adminTab === 'bots') adminBots(body);
   if (state.adminTab === 'inbox') adminInbox(body);
+  if (state.adminTab === 'referrals') adminReferrals(body);
   if (state.adminTab === 'payments') adminPayments(body);
   if (state.adminTab === 'installer') adminInstaller(body);
 }
@@ -1754,6 +1798,30 @@ async function adminPayments(el) {
         adminPayments(el);
       } catch (e) { toast(e.message, 'err'); }
     };
+  } catch (e) {
+    el.innerHTML = `<div class="alert alert-error show">${esc(e.message)}</div>`;
+  }
+}
+
+
+/* ---------------------------------------------------------------- admin: referrals */
+async function adminReferrals(el) {
+  if (state.logTimer) { clearInterval(state.logTimer); state.logTimer = null; }
+  el.innerHTML = '<div class="empty">Loading...</div>';
+  try {
+    const r = await api('/api/admin/referrals');
+    el.innerHTML = `
+      <div class="stats-row">
+        <div class="stat"><div class="k">Referred signups</div><div class="v">${r.referrals.length}</div></div>
+        <div class="stat"><div class="k">Rewarded</div><div class="v" style="color:var(--ok)">${r.rewarded}</div></div>
+        <div class="stat"><div class="k">Coins given</div><div class="v">${r.coinsGiven}</div></div>
+      </div>
+      ${r.referrals.length ? `<div class="table-wrap"><table>
+        <thead><tr><th>New user</th><th>Invited by</th><th>Status</th><th>Joined</th></tr></thead>
+        <tbody>${r.referrals.map((x) => `<tr><td><b>${esc(x.username)}</b></td><td>${esc(x.referrer)}</td>
+          <td><span class="pstatus ${x.status === 'rewarded' ? 'approved' : x.status === 'blocked' ? 'rejected' : 'pending'}">${esc(x.status)}</span>${x.note ? `<br/><span class="pay-sub">${esc(x.note)}</span>` : ''}</td>
+          <td style="color:var(--muted)">${x.joined ? new Date(x.joined).toLocaleDateString() : '-'}</td></tr>`).join('')}</tbody>
+      </table></div>` : '<div class="empty"><h3>No referrals yet</h3><p>Users share their link from the dashboard.</p></div>'}`;
   } catch (e) {
     el.innerHTML = `<div class="alert alert-error show">${esc(e.message)}</div>`;
   }
