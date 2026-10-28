@@ -32,6 +32,13 @@ Built by **Ntandomods** · Deployable on **Render** in one click.
 
 ---
 
+## 🏦 Payments, ZiG prices & contact admin
+
+- **Pay page (`#/pay`)**: signed-in users see the admin's **NSB** bank accounts (ZiG `3251650604001`, USD `3251650604451`), their username as the payment reference, and a USD + ZiG price table.
+- **ZiG prices**: ZiG = USD price x `zigPerUsd`. Default rate `26.57` (RBZ interbank, 27 Oct 2026); change it any time in **Admin -> Payments** or with `ZIG_PER_USD`. ZiG prices also appear on the public pricing section.
+- **Admin -> Payments**: edit bank name, account holder name, accounts, exchange rate and instructions (stored in the database, backed up with everything else). Env overrides for first boot: `PAYMENT_BANK`, `PAYMENT_ACCOUNT_NAME`, `PAYMENT_ZIG_ACCOUNT`, `PAYMENT_USD_ACCOUNT`, `PAYMENT_INSTRUCTIONS`.
+- **Contact admin (`#/support`)**: every user has a private thread with the admin (2000 chars/message, 5 messages/minute). Unread badge in the nav. The admin answers from **Admin -> Inbox**.
+
 ## 🗄️ MongoDB backup (keeps data on Render free)
 
 Set one environment variable and the platform backs itself up:

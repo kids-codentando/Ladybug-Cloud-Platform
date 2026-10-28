@@ -19,6 +19,7 @@ const installer = require('./lib/installer');
 const sessiongen = require('./lib/sessiongen');
 const FileSessionStore = require('./lib/session-store');
 const billing = require('./lib/billing');
+const payments = require('./lib/payments');
 const mongoSync = require('./lib/mongo-sync');
 
 const app = express();
@@ -220,7 +221,7 @@ app.get('/api/auth/me', (req, res) => {
 
 // ---------------------------------------------------------------- billing / coins
 app.get('/api/billing', requireAuth, (req, res) => {
-  res.json(billing.summary(req.user));
+  res.json({ ...billing.summary(req.user), zigPerUsd: payments.get().zigPerUsd });
 });
 
 app.post('/api/coins/claim', requireAuth, (req, res) => {
@@ -297,6 +298,147 @@ app.post('/api/billing/slots', requireAuth, (req, res) => {
       `${url}${url.includes('?') ? '&' : '?'}plan=slot&qty=${want}` +
       `&client_reference_id=${encodeURIComponent(req.user.username)}`,
   });
+});
+
+// ---------------------------------------------------------------- prices + payment details
+// Public: USD and ZiG prices for the pricing page.
+app.get('/api/prices', (req, res) => {
+  res.json(payments.prices());
+});
+
+// Signed-in users: prices plus the admin's bank details to pay into.
+app.get('/api/payments', requireAuth, (req, res) => {
+  const p = payments.get();
+  res.json({
+    ...payments.prices(),
+    bankName: p.bankName,
+    accountName: p.accountName,
+    accounts: p.accounts,
+    instructions: p.instructions,
+    reference: req.user.username,
+  });
+});
+
+app.get('/api/admin/payments', requireAdmin, (req, res) => {
+  res.json({ ...payments.get(), prices: payments.prices() });
+});
+
+app.put('/api/admin/payments', requireAdmin, (req, res) => {
+  try {
+    const p = payments.update(req.body || {});
+    res.json({ ok: true, ...p, prices: payments.prices() });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// ---------------------------------------------------------------- contact admin (messages)
+const MSG_MAX = 2000;
+
+function cleanMessage(v) {
+  return String(v == null ? '' : v).replace(/\r\n/g, '\n').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '').trim();
+}
+
+function messageView(m) {
+  return { id: m.id, from: m.from, body: m.body, at: m.at };
+}
+
+// The signed-in user's own conversation with the admin.
+app.get('/api/messages', requireAuth, (req, res) => {
+  const msgs = db.messagesForUser(req.user.id);
+  const unread = msgs.filter((m) => m.from === 'admin' && !m.readByUser).length;
+  if (req.query.markRead === '1' && unread) {
+    msgs.forEach((m) => { if (m.from === 'admin') m.readByUser = true; });
+    db.save();
+  }
+  res.json({ messages: msgs.map(messageView), unread: req.query.markRead === '1' ? 0 : unread });
+});
+
+app.get('/api/messages/unread', requireAuth, (req, res) => {
+  const mine = db.messagesForUser(req.user.id).filter((m) => m.from === 'admin' && !m.readByUser).length;
+  const admin = req.user.isAdmin
+    ? db.allMessages().filter((m) => m.from === 'user' && !m.readByAdmin).length
+    : 0;
+  res.json({ unread: mine, adminUnread: admin });
+});
+
+app.post('/api/messages', requireAuth, (req, res) => {
+  const body = cleanMessage(req.body && req.body.body);
+  if (!body) return res.status(400).json({ error: 'Write a message first.' });
+  if (body.length > MSG_MAX) return res.status(400).json({ error: `Message is too long (max ${MSG_MAX} characters).` });
+  const recent = db.messagesForUser(req.user.id).filter((m) => m.from === 'user' && Date.now() - m.at < 60 * 1000);
+  if (recent.length >= 5) return res.status(429).json({ error: 'Slow down - please wait a minute before sending more.' });
+  const msg = db.addMessage({
+    id: uid(),
+    userId: req.user.id,
+    from: 'user',
+    body,
+    at: Date.now(),
+    readByAdmin: false,
+    readByUser: true,
+  });
+  res.json({ ok: true, message: messageView(msg) });
+});
+
+// Admin inbox: one row per user who has written or been written to.
+app.get('/api/admin/messages', requireAdmin, (req, res) => {
+  const byUser = new Map();
+  for (const m of db.allMessages()) {
+    if (!byUser.has(m.userId)) byUser.set(m.userId, []);
+    byUser.get(m.userId).push(m);
+  }
+  const threads = [];
+  for (const [userId, msgs] of byUser) {
+    const u = db.findUserById(userId);
+    if (!u) continue;
+    const last = msgs[msgs.length - 1];
+    threads.push({
+      userId,
+      username: u.username,
+      email: u.email || '',
+      count: msgs.length,
+      unread: msgs.filter((m) => m.from === 'user' && !m.readByAdmin).length,
+      last: { from: last.from, body: last.body.slice(0, 140), at: last.at },
+    });
+  }
+  threads.sort((a, b) => b.last.at - a.last.at);
+  res.json({ threads, unread: threads.reduce((n, t) => n + t.unread, 0) });
+});
+
+app.get('/api/admin/messages/:userId', requireAdmin, (req, res) => {
+  const u = db.findUserById(req.params.userId);
+  if (!u) return res.status(404).json({ error: 'User not found' });
+  const msgs = db.messagesForUser(u.id);
+  if (msgs.some((m) => m.from === 'user' && !m.readByAdmin)) {
+    msgs.forEach((m) => { if (m.from === 'user') m.readByAdmin = true; });
+    db.save();
+  }
+  res.json({ user: publicUser(u), messages: msgs.map(messageView) });
+});
+
+app.post('/api/admin/messages/:userId', requireAdmin, (req, res) => {
+  const u = db.findUserById(req.params.userId);
+  if (!u) return res.status(404).json({ error: 'User not found' });
+  const body = cleanMessage(req.body && req.body.body);
+  if (!body) return res.status(400).json({ error: 'Write a message first.' });
+  if (body.length > MSG_MAX) return res.status(400).json({ error: `Message is too long (max ${MSG_MAX} characters).` });
+  // replying implies the user's earlier messages were read
+  db.messagesForUser(u.id).forEach((m) => { if (m.from === 'user') m.readByAdmin = true; });
+  const msg = db.addMessage({
+    id: uid(),
+    userId: u.id,
+    from: 'admin',
+    body,
+    at: Date.now(),
+    readByAdmin: true,
+    readByUser: false,
+  });
+  res.json({ ok: true, message: messageView(msg) });
+});
+
+app.delete('/api/admin/messages/:userId', requireAdmin, (req, res) => {
+  db.deleteThread(req.params.userId);
+  res.json({ ok: true });
 });
 
 // ---------------------------------------------------------------- user bots

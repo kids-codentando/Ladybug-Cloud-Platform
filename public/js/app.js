@@ -56,6 +56,26 @@ function fmtLeft(ms) {
   return [d && `${d}d`, (d || h) && `${h}h`, `${m}m`].filter(Boolean).join(' ');
 }
 
+/* ---------------------------------------------------------------- zig + unread helpers */
+function zigFmt(usd, rate) {
+  if (!rate) return '';
+  return 'ZiG ' + (Math.round(usd * rate * 100) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+async function refreshUnread() {
+  if (!state.user) { state.unread = 0; state.adminUnread = 0; return; }
+  try {
+    const r = await api('/api/messages/unread');
+    state.unread = r.unread || 0;
+    state.adminUnread = r.adminUnread || 0;
+  } catch (e) { /* ignore */ }
+  const n = $('#navMsgN');
+  if (n) {
+    const total = (state.unread || 0) + (state.adminUnread || 0);
+    n.textContent = total; n.style.display = total ? '' : 'none';
+  }
+}
+
 /* ---------------------------------------------------------------- wallet */
 function walletHTML(b) {
   const c = b.config;
@@ -81,7 +101,8 @@ function walletHTML(b) {
     : `<button class="btn btn-claim" disabled id="claimBtn">Next claim in&nbsp;<span data-left="${b.nextClaimAt}">${fmtLeft(b.nextClaimAt - now)}</span></button>`;
   const sub = b.mode === 'subscription' || b.mode === 'admin' ? '' : (c.paymentUrl
     ? `<a class="btn" href="${esc(c.paymentUrl)}${c.paymentUrl.includes('?') ? '&' : '?'}client_reference_id=${encodeURIComponent(state.user.username)}" target="_blank" rel="noopener">Subscribe for $${c.priceUsd}/month</a>`
-    : `<button class="btn" id="subBtn">Subscribe for $${c.priceUsd}/month</button>`);
+    : `<button class="btn" id="subBtn">Subscribe for $${c.priceUsd}/month${b.zigPerUsd ? ` <span class="zig-inline">(${zigFmt(c.priceUsd, b.zigPerUsd)})</span>` : ''}</button>`);
+  const payRow = `<div class="pay-row"><a class="btn btn-sm" href="#/pay">Payment details &amp; ZiG prices</a><a class="btn btn-sm btn-ghost" href="#/support">Contact admin</a></div>`;
 
   // Auto-claim add-on ($2/month) — the server claims the daily coins for you.
   const ac = b.autoClaim || {};
@@ -146,6 +167,7 @@ function walletHTML(b) {
       <div class="wallet-actions">${claimBtn}${sub}</div>
       ${autoClaim}
       ${slots}
+      ${payRow}
       ${log ? `<details class="coin-log"><summary>Recent activity</summary>${log}</details>` : ''}
     </div>
   </div>`;
@@ -169,14 +191,14 @@ async function loadWallet() {
       loadWallet();
     };
     const sb = $('#subBtn');
-    if (sb) sb.onclick = () => toast('Subscriptions are activated by the admin - contact them to subscribe.', 'ok');
+    if (sb) sb.onclick = () => { location.hash = '#/pay'; };
     const ab = $('#autoClaimBtn');
     if (ab) ab.onclick = async () => {
       ab.disabled = true; ab.innerHTML = '<span class="spin"></span>';
       try {
         const r = await api('/api/billing/autoclaim', { method: 'POST' });
         if (r.url) { window.open(r.url, '_blank', 'noopener'); toast('Finish the payment to switch it on.', 'ok'); }
-        else toast(r.message || 'Auto-claim requested.', 'ok');
+        else { toast(r.message || 'Auto-claim requested.', 'ok'); if (r.manual) location.hash = '#/pay'; }
       } catch (e) { toast(e.message, 'err'); }
       loadWallet();
     };
@@ -186,7 +208,7 @@ async function loadWallet() {
       try {
         const r = await api('/api/billing/slots', { method: 'POST', body: { count: 1 } });
         if (r.url) { window.open(r.url, '_blank', 'noopener'); toast('Finish the payment to add the slot.', 'ok'); }
-        else toast(r.message || 'Slot requested.', 'ok');
+        else { toast(r.message || 'Slot requested.', 'ok'); if (r.manual) location.hash = '#/pay'; }
       } catch (e) { toast(e.message, 'err'); }
       loadWallet();
     };
@@ -214,6 +236,8 @@ const routes = {
   '/dashboard': renderDashboard,
   '/status': renderStatus,
   '/admin': renderAdmin,
+  '/pay': renderPay,
+  '/support': renderSupport,
 };
 
 async function navigate() {
@@ -228,6 +252,7 @@ async function navigate() {
   } catch (e) { state.user = null; }
 
   renderNav();
+  refreshUnread();
 
   const fn = routes[path] || renderLanding;
   await fn();
@@ -241,9 +266,12 @@ function renderNav() {
     const coins = state.billing ? state.billing.coins : state.user.coins || 0;
     el.innerHTML = `
       <a href="#/dashboard" class="nav-link hide-sm">Dashboard</a>
+      <a href="#/pay" class="nav-link hide-sm">Pay</a>
+      <a href="#/support" class="nav-link hide-sm">Contact admin</a>
       <a href="#/status" class="nav-link hide-sm">Status</a>
       ${state.user.isAdmin ? '<a href="#/admin" class="nav-link hide-sm">Admin</a>' : ''}
       <span class="nav-sep hide-sm"></span>
+      <a href="#/support" class="msg-chip" title="Messages"><span aria-hidden="true">&#9993;</span><span class="msg-n" id="navMsgN" style="display:none">0</span></a>
       <a href="#/dashboard" class="coin-chip" id="navCoins" title="Your coins"><i class="coin-dot"></i><span id="navCoinsN">${coins}</span></a>
       <button class="btn btn-sm btn-ghost" id="logoutBtn" title="Signed in as ${esc(state.user.username)}">Log out</button>`;
     $('#logoutBtn').onclick = async () => {
@@ -524,6 +552,7 @@ async function renderLanding() {
         <div class="plan reveal">
           <div class="plan-name">Unlimited</div>
           <div class="plan-price">$${price}<small>per month</small></div>
+          <div class="plan-zig" data-zig="${price}"></div>
           <p class="plan-desc">For bots you never want to think about.</p>
           <ul><li>Runs 24/7 without coins</li><li>No daily claiming</li><li>Your coins stay in your balance</li></ul>
           <a href="#/register" class="btn btn-block">Get started</a>
@@ -531,6 +560,7 @@ async function renderLanding() {
         <div class="plan reveal">
           <div class="plan-name">Auto-claim <span class="plan-tag alt">New</span></div>
           <div class="plan-price">$2<small>per month</small></div>
+          <div class="plan-zig" data-zig="2"></div>
           <p class="plan-desc">Keep the free coins, stop remembering to claim them.</p>
           <ul><li>We claim your 20 coins every 24h</li><li>No more paused bots after a busy day</li><li>Cheaper than Unlimited — you keep paying in coins</li></ul>
           <a href="#/register" class="btn btn-block">Start free trial</a>
@@ -538,6 +568,7 @@ async function renderLanding() {
         <div class="plan reveal">
           <div class="plan-name">Extra bot slot <span class="plan-tag addon">Add-on</span></div>
           <div class="plan-price">$1<small>per month</small></div>
+          <div class="plan-zig" data-zig="1"></div>
           <p class="plan-desc">One more bot, without jumping to Unlimited.</p>
           <ul><li>+1 bot slot per purchase — stack as many as you need</li><li>Works on any plan, including the free trial</li><li>Cancel by simply not renewing</li></ul>
           <a href="#/register" class="btn btn-block">Start free trial</a>
@@ -555,7 +586,7 @@ async function renderLanding() {
         <details><summary>What is auto-claim?</summary><p>A $2/month add-on that claims your free coins for you. You still pay for hosting in coins, but you never have to remember the daily tap — so a busy day can't pause your bot. If you already pay for Unlimited, auto-claim is pointless and the dashboard will tell you so.</p></details>
         <details><summary>How do I run two bots?</summary><p>Each extra bot slot is $1/month and stacks on whatever plan you are on, including the free trial. Buy as many as you need from your dashboard — they all renew together and quietly expire if you stop paying, so there is nothing to cancel.</p></details>
         <details><summary>Can I stack coins?</summary><p>Yes, up to 140. That is a week of hosting if you want to claim less often.</p></details>
-        <details><summary>How do I pay the $${price} a month?</summary><p>Use the Subscribe button on your dashboard. Once your payment is confirmed, your account switches to Unlimited.</p></details>
+        <details><summary>How do I pay the $${price} a month?</summary><p>Pay in USD or ZiG by bank transfer to the NSB accounts listed on the Pay page once you are signed in, then message the admin from your dashboard with your proof of payment. Once your payment is confirmed, your account switches to Unlimited.</p></details>
         <details><summary>Is it safe to use with my WhatsApp?</summary><p>The bot runs as a linked device, like WhatsApp Web. Your chats stay on WhatsApp and session IDs are never shown publicly. Still follow WhatsApp's rules: don't spam groups or blast random numbers.</p></details>
         <details><summary>Will I lose my account if the site restarts?</summary><p>No. Accounts, bots, coins and logins are backed up continuously and restored automatically.</p></details>
       </div>
@@ -586,6 +617,10 @@ async function renderLanding() {
 
 /* ---------------- landing interactions ---------------- */
 function initLanding() {
+  // ZiG prices (rate is set by the admin)
+  api('/api/prices').then((p) => {
+    $$('[data-zig]').forEach((el) => { el.textContent = `or ${zigFmt(parseFloat(el.dataset.zig), p.zigPerUsd)} per month`; });
+  }).catch(() => {});
   // scroll reveal
   const items = $$('.reveal');
   if (!('IntersectionObserver' in window)) {
@@ -1164,6 +1199,8 @@ async function renderAdmin() {
         <button class="tab" data-tab="overview">Overview</button>
         <button class="tab" data-tab="users">Users</button>
         <button class="tab" data-tab="bots">All Bots</button>
+        <button class="tab" data-tab="inbox">Inbox${state.adminUnread ? ` <span class="msg-n">${state.adminUnread}</span>` : ''}</button>
+        <button class="tab" data-tab="payments">Payments</button>
         <button class="tab" data-tab="installer">Bot Installer</button>
       </div>
       <div id="adminBody"></div>
@@ -1182,6 +1219,8 @@ function adminTabs() {
   if (state.adminTab === 'overview') adminOverview(body);
   if (state.adminTab === 'users') adminUsers(body);
   if (state.adminTab === 'bots') adminBots(body);
+  if (state.adminTab === 'inbox') adminInbox(body);
+  if (state.adminTab === 'payments') adminPayments(body);
   if (state.adminTab === 'installer') adminInstaller(body);
 }
 
@@ -1401,3 +1440,212 @@ window.addEventListener('hashchange', navigate);
 window.closeModal = closeModal;
 window.openNewBot = openNewBot;
 navigate();
+
+
+/* ---------------------------------------------------------------- pay page (user) */
+async function renderPay() {
+  if (!state.user) return (location.hash = '#/login');
+  $('#view').innerHTML = '<div class="app"><div class="wrap"><div class="empty">Loading...</div></div></div>';
+  let p;
+  try { p = await api('/api/payments'); } catch (e) {
+    $('#view').innerHTML = `<div class="app"><div class="wrap"><div class="alert alert-error show">${esc(e.message)}</div></div></div>`;
+    return;
+  }
+  const accounts = p.accounts.map((a) => `
+    <div class="acct">
+      <div class="acct-cur">${esc(a.currency)}</div>
+      <div class="acct-body">
+        <div class="k">${esc(p.bankName)} ${esc(a.currency)} account</div>
+        <div class="acct-num" id="acct-${esc(a.currency)}">${esc(a.number)}</div>
+        ${p.accountName ? `<div class="acct-name">${esc(p.accountName)}</div>` : ''}
+      </div>
+      <button class="btn btn-sm" data-copy="${esc(a.number)}">Copy</button>
+    </div>`).join('');
+  const rows = p.items.map((i) => `
+    <tr><td><b>${esc(i.name)}</b><br/><span style="color:var(--muted);font-size:12px">per ${i.days} days</span></td>
+    <td>$${i.usd}</td><td><b>${esc('ZiG ' + i.zig.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))}</b></td></tr>`).join('');
+  $('#view').innerHTML = `
+  <div class="app"><div class="wrap">
+    <div class="app-head">
+      <div><h1>Pay &amp; prices</h1><p>Pay the admin by bank transfer in USD or ZiG.</p></div>
+      <a class="btn btn-primary" href="#/support">I have paid - contact admin</a>
+    </div>
+    <div class="pay-grid">
+      <div class="card">
+        <h3>${esc(p.bankName)} bank accounts</h3>
+        <div class="accts">${accounts}</div>
+        <div class="pay-ref"><div class="k">Payment reference</div><b>${esc(p.reference)}</b>
+          <button class="btn btn-sm" data-copy="${esc(p.reference)}">Copy</button></div>
+        <p class="pay-note">${esc(p.instructions)}</p>
+      </div>
+      <div class="card">
+        <h3>Prices</h3>
+        <div class="table-wrap" style="margin-top:10px"><table>
+          <thead><tr><th>Option</th><th>USD</th><th>ZiG</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table></div>
+        <p class="pay-note">ZiG prices use a rate of <b>1 USD = ZiG ${p.zigPerUsd}</b>. The admin updates the rate when the market moves, so always check this page before you send money.</p>
+      </div>
+    </div>
+  </div></div>`;
+  $$('[data-copy]').forEach((b) => (b.onclick = async () => {
+    try { await navigator.clipboard.writeText(b.dataset.copy); toast('Copied'); } catch (e) { toast('Copy failed - select the text instead', 'err'); }
+  }));
+}
+
+/* ---------------------------------------------------------------- contact admin (user) */
+function threadHTML(msgs, mineIs) {
+  if (!msgs.length) return '<div class="chat-empty">No messages yet. Say hello below.</div>';
+  return msgs.map((m) => `
+    <div class="chat-msg ${m.from === mineIs ? 'mine' : 'theirs'}">
+      <div class="chat-bubble">${esc(m.body).replace(/\n/g, '<br/>')}</div>
+      <div class="chat-time">${m.from === 'admin' ? 'Admin' : 'You'} - ${new Date(m.at).toLocaleString()}</div>
+    </div>`).join('');
+}
+
+async function renderSupport() {
+  if (!state.user) return (location.hash = '#/login');
+  $('#view').innerHTML = `
+  <div class="app"><div class="wrap">
+    <div class="app-head">
+      <div><h1>Contact admin</h1><p>Questions, payment proof, plan requests - the admin replies here.</p></div>
+      <a class="btn" href="#/pay">Payment details</a>
+    </div>
+    <div class="card chat">
+      <div class="chat-thread" id="chatThread"><div class="chat-empty">Loading...</div></div>
+      <form class="chat-form" id="chatForm">
+        <textarea class="input" id="chatBody" maxlength="2000" rows="3" placeholder="Write your message... e.g. I paid ZiG 79.71 for Unlimited, reference ${esc(state.user.username)}"></textarea>
+        <div class="chat-actions"><span class="chat-count" id="chatCount">0 / 2000</span><button class="btn btn-primary" type="submit">Send</button></div>
+      </form>
+    </div>
+  </div></div>`;
+  const load = async (scroll) => {
+    try {
+      const r = await api('/api/messages?markRead=1');
+      const t = $('#chatThread');
+      if (!t) return;
+      t.innerHTML = threadHTML(r.messages, 'user');
+      if (scroll) t.scrollTop = t.scrollHeight;
+      refreshUnread();
+    } catch (e) { /* ignore */ }
+  };
+  await load(true);
+  state.logTimer = setInterval(() => load(false), 8000);
+  const body = $('#chatBody');
+  body.oninput = () => { $('#chatCount').textContent = `${body.value.length} / 2000`; };
+  $('#chatForm').onsubmit = async (ev) => {
+    ev.preventDefault();
+    const text = body.value.trim();
+    if (!text) return;
+    const btn = $('#chatForm button[type=submit]'); btn.disabled = true;
+    try {
+      await api('/api/messages', { method: 'POST', body: { body: text } });
+      body.value = ''; $('#chatCount').textContent = '0 / 2000';
+      await load(true);
+    } catch (e) { toast(e.message, 'err'); }
+    btn.disabled = false;
+  };
+}
+
+/* ---------------------------------------------------------------- admin: inbox */
+async function adminInbox(el, openUserId) {
+  if (state.logTimer) { clearInterval(state.logTimer); state.logTimer = null; }
+  el.innerHTML = '<div class="empty">Loading...</div>';
+  try {
+    const { threads } = await api('/api/admin/messages');
+    if (!threads.length) { el.innerHTML = '<div class="empty"><h3>No messages yet</h3><p>When users contact you from their dashboard, they show up here.</p></div>'; return; }
+    el.innerHTML = `
+      <div class="inbox">
+        <div class="inbox-list">${threads.map((t) => `
+          <button class="inbox-row ${openUserId === t.userId ? 'active' : ''}" data-thread="${t.userId}">
+            <div class="inbox-top"><b>${esc(t.username)}</b>${t.unread ? `<span class="msg-n">${t.unread}</span>` : ''}<span class="inbox-time">${timeAgo(t.last.at)}</span></div>
+            <div class="inbox-prev">${t.last.from === 'admin' ? 'You: ' : ''}${esc(t.last.body)}</div>
+          </button>`).join('')}</div>
+        <div class="inbox-view card" id="inboxView"><div class="chat-empty">Pick a conversation.</div></div>
+      </div>`;
+    $$('[data-thread]').forEach((b) => (b.onclick = () => openThread(el, b.dataset.thread)));
+    if (openUserId) openThread(el, openUserId, true);
+  } catch (e) {
+    el.innerHTML = `<div class="alert alert-error show">${esc(e.message)}</div>`;
+  }
+}
+
+async function openThread(listEl, userId, skipRelist) {
+  const view = $('#inboxView');
+  try {
+    const r = await api(`/api/admin/messages/${userId}`);
+    $$('.inbox-row').forEach((x) => x.classList.toggle('active', x.dataset.thread === userId));
+    view.innerHTML = `
+      <div class="inbox-head"><div><h3>${esc(r.user.username)}</h3><span style="color:var(--muted);font-size:12.5px">${esc(r.user.email || '')} - ${esc(r.user.billingMode)} - ${r.user.coins} coins</span></div>
+        <button class="btn btn-sm btn-danger" id="delThread">Delete chat</button></div>
+      <div class="chat-thread" id="adminThread">${threadHTML(r.messages, 'admin')}</div>
+      <form class="chat-form" id="adminReplyForm">
+        <textarea class="input" id="adminReply" maxlength="2000" rows="3" placeholder="Reply to ${esc(r.user.username)}..."></textarea>
+        <div class="chat-actions"><span></span><button class="btn btn-primary" type="submit">Send reply</button></div>
+      </form>`;
+    const t = $('#adminThread'); t.scrollTop = t.scrollHeight;
+    refreshUnread();
+    $('#adminReplyForm').onsubmit = async (ev) => {
+      ev.preventDefault();
+      const text = $('#adminReply').value.trim();
+      if (!text) return;
+      try {
+        await api(`/api/admin/messages/${userId}`, { method: 'POST', body: { body: text } });
+        openThread(listEl, userId);
+      } catch (e) { toast(e.message, 'err'); }
+    };
+    $('#delThread').onclick = async () => {
+      if (!confirm(`Delete the whole conversation with ${r.user.username}?`)) return;
+      try { await api(`/api/admin/messages/${userId}`, { method: 'DELETE' }); toast('Deleted'); adminInbox(listEl); } catch (e) { toast(e.message, 'err'); }
+    };
+  } catch (e) { toast(e.message, 'err'); }
+}
+
+/* ---------------------------------------------------------------- admin: payment details */
+async function adminPayments(el) {
+  if (state.logTimer) { clearInterval(state.logTimer); state.logTimer = null; }
+  el.innerHTML = '<div class="empty">Loading...</div>';
+  try {
+    const p = await api('/api/admin/payments');
+    const acctRow = (a = { currency: '', number: '' }) => `
+      <div class="acct-edit"><input class="input" data-cur placeholder="Currency (ZiG)" value="${esc(a.currency)}" style="max-width:120px" />
+      <input class="input" data-num placeholder="Account number" value="${esc(a.number)}" /></div>`;
+    el.innerHTML = `
+    <div class="pay-grid">
+      <form class="card" id="payForm">
+        <h3>Payment details shown to users</h3>
+        <div class="field"><label>Bank</label><input class="input" id="pBank" value="${esc(p.bankName)}" /></div>
+        <div class="field"><label>Account holder name (optional)</label><input class="input" id="pName" value="${esc(p.accountName)}" placeholder="Name on the account" /></div>
+        <div class="field"><label>Accounts</label><div id="acctRows">${p.accounts.map(acctRow).join('')}</div>
+          <button class="btn btn-sm" type="button" id="addAcct" style="margin-top:8px">Add account</button></div>
+        <div class="field"><label>Exchange rate (ZiG per 1 USD)</label><input class="input" id="pRate" type="number" step="0.0001" min="0" value="${p.zigPerUsd}" />
+          <small style="color:var(--muted)">Used for every ZiG price. Check the RBZ rate and update when it moves.</small></div>
+        <div class="field"><label>Instructions</label><textarea class="input" id="pInstr" rows="4" maxlength="600" style="font-family:var(--sans)">${esc(p.instructions)}</textarea></div>
+        <button class="btn btn-primary" type="submit">Save</button>
+      </form>
+      <div class="card">
+        <h3>Current prices</h3>
+        <div class="table-wrap" style="margin-top:10px"><table>
+          <thead><tr><th>Option</th><th>USD</th><th>ZiG</th></tr></thead>
+          <tbody id="priceRows">${p.prices.items.map((i) => `<tr><td>${esc(i.name)}</td><td>$${i.usd}</td><td>ZiG ${i.zig.toFixed(2)}</td></tr>`).join('')}</tbody>
+        </table></div>
+        <p class="pay-note">USD prices come from the server settings (SUBSCRIPTION_PRICE_USD, AUTOCLAIM_PRICE_USD, SLOT_PRICE_USD). ZiG = USD x rate.</p>
+      </div>
+    </div>`;
+    $('#addAcct').onclick = () => { $('#acctRows').insertAdjacentHTML('beforeend', acctRow()); };
+    $('#payForm').onsubmit = async (ev) => {
+      ev.preventDefault();
+      const accounts = $$('.acct-edit').map((r) => ({ currency: $('[data-cur]', r).value, number: $('[data-num]', r).value }));
+      try {
+        await api('/api/admin/payments', { method: 'PUT', body: {
+          bankName: $('#pBank').value, accountName: $('#pName').value, accounts,
+          zigPerUsd: $('#pRate').value, instructions: $('#pInstr').value,
+        } });
+        toast('Payment details saved');
+        adminPayments(el);
+      } catch (e) { toast(e.message, 'err'); }
+    };
+  } catch (e) {
+    el.innerHTML = `<div class="alert alert-error show">${esc(e.message)}</div>`;
+  }
+}
