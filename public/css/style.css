@@ -818,3 +818,28 @@ select.input{appearance:auto}
 .bonus-coins b{color:var(--coin)}
 .bonus-coins small{color:var(--faint);font-size:12px}
 .buy-link{margin-left:6px;font-weight:700;color:var(--text);text-decoration:underline;text-underline-offset:3px}
+
+
+/* ---- site background image ---- */
+body{position:relative;background:var(--bg)}
+body::before{
+  content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;
+  background:
+    linear-gradient(180deg,rgba(13,11,11,.35) 0,rgba(13,11,11,.15) 40%,rgba(13,11,11,.82) 100%),
+    url('/img/bg.jpg') 70% center/cover no-repeat;
+  background:
+    linear-gradient(180deg,rgba(13,11,11,.35) 0,rgba(13,11,11,.15) 40%,rgba(13,11,11,.82) 100%),
+    image-set(url('/img/bg.webp') type('image/webp'),url('/img/bg.jpg') type('image/jpeg')) 70% center/cover no-repeat;
+}
+/* signed-in pages and sub-pages: dim the art so tables and forms stay easy to read */
+body[data-page]:not([data-page="/"]):not([data-page="/pricing"])::before{
+  background:
+    linear-gradient(rgba(13,11,11,.72),rgba(13,11,11,.88)),
+    url('/img/bg.jpg') 70% center/cover no-repeat;
+  background:
+    linear-gradient(rgba(13,11,11,.72),rgba(13,11,11,.88)),
+    image-set(url('/img/bg.webp') type('image/webp'),url('/img/bg.jpg') type('image/jpeg')) 70% center/cover no-repeat;
+}
+.hero .orb{opacity:.35}
+.section{background:linear-gradient(180deg,rgba(13,11,11,.55),rgba(13,11,11,.35))}
+@media(max-width:760px){body::before{background-position:78% center}}

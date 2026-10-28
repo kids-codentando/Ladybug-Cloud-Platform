@@ -258,6 +258,7 @@ async function navigate() {
     state.user = r.user;
   } catch (e) { state.user = null; }
 
+  document.body.dataset.page = path;
   renderNav();
   refreshUnread();
 
