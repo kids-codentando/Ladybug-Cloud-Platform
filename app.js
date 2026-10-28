@@ -1000,25 +1000,68 @@ const server = app.listen(PORT, () => {
 
 // Resume bots that were running before a restart. On ephemeral filesystems the
 // bot's node_modules may be gone, so make sure they exist first.
+// A short delay lets an overlapping old instance (zero-downtime redeploys) shut
+// its sockets down first - WhatsApp rejects two connections on one session.
+const BOOT_RESUME_DELAY_MS = Math.max(3, parseInt(process.env.BOOT_RESUME_DELAY_SEC || '20', 10)) * 1000;
 setTimeout(async () => {
   const pending = db.data.bots.filter((b) => b.status === 'running' && b.sessionId);
   if (!pending.length) return;
+  console.log(`[boot] ${pending.length} bot(s) were running before the restart - resuming`);
 
   if (installer.getState().installed && !installer.depsInstalled()) {
-    console.log('[boot] Bot dependencies missing — installing before resume...');
-    try {
-      await installer.ensureDependencies((line) => console.log(`[deps] ${line}`));
-      console.log('[boot] Dependencies ready.');
-    } catch (e) {
-      console.error(`[boot] Dependency install failed: ${e.message}`);
+    console.log('[boot] Bot dependencies missing - installing before resume...');
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        await installer.ensureDependencies((line) => console.log(`[deps] ${line}`));
+        console.log('[boot] Dependencies ready.');
+        break;
+      } catch (e) {
+        console.error(`[boot] Dependency install failed (attempt ${attempt}/3): ${e.message}`);
+        await new Promise((r) => setTimeout(r, 5000));
+      }
     }
   }
 
   for (const bot of pending) {
     console.log(`[boot] Resuming bot "${bot.name}"`);
-    bots.start(bot);
+    try { bots.start(bot); } catch (e) { console.error(`[boot] could not start "${bot.name}": ${e.message}`); }
+    await new Promise((r) => setTimeout(r, 1500)); // stagger so the host is not hit all at once
   }
-}, 3000);
+}, BOOT_RESUME_DELAY_MS);
+
+// Watchdog: every minute make sure every bot that SHOULD be running IS running.
+// Covers crash loops that exhausted auto-restart, failed resumes and WhatsApp
+// conflicts during redeploys. Bots the user stopped (status 'stopped') are left alone.
+function botWatchdog() {
+  try {
+    for (const bot of db.listBots()) {
+      if (bot.status !== 'running' || !bot.sessionId) continue;
+      bots.markHealthy(bot.id);
+      const owner = db.findUserById(bot.userId);
+      if (!owner) continue;
+      // never revive a bot its owner can no longer pay for - billingTick stops those
+      const paid = billing.runsFree(owner) || (bot.coinPaidUntil && bot.coinPaidUntil > Date.now()) ||
+        billing.totalCoins(owner) >= billing.cfg.botCoinCost;
+      if (!paid) continue;
+      if (bots.revive(bot)) console.log(`[watchdog] restarted "${bot.name}" (${owner.username})`);
+    }
+  } catch (e) {
+    console.error(`[watchdog] pass failed: ${e.message}`);
+  }
+}
+setTimeout(() => setInterval(botWatchdog, 60 * 1000).unref(), BOOT_RESUME_DELAY_MS + 30 * 1000).unref();
+
+// Keep-alive: Render's free plan puts the service to sleep after ~15 minutes without
+// inbound traffic, which takes every bot offline. Pinging our own public URL counts as
+// traffic. Only active when Render provides the public URL (or KEEP_ALIVE_URL is set).
+const KEEP_ALIVE_URL = process.env.KEEP_ALIVE_URL || process.env.RENDER_EXTERNAL_URL || '';
+if (KEEP_ALIVE_URL && process.env.KEEP_ALIVE !== 'false') {
+  const pingUrl = KEEP_ALIVE_URL.replace(/\/+$/, '') + '/healthz';
+  setInterval(() => {
+    fetch(pingUrl, { signal: AbortSignal.timeout(15000) }).catch((e) => console.error(`[keep-alive] ping failed: ${e.message}`));
+  }, 10 * 60 * 1000).unref();
+  console.log(`[keep-alive] pinging ${pingUrl} every 10 minutes`);
+}
 
 // Every minute: renew coin-funded bots, stop the ones that can no longer pay,
 // and top up anyone paying for auto-claim.
