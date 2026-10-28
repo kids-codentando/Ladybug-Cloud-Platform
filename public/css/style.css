@@ -811,3 +811,10 @@ select.input{appearance:auto}
 .pstatus.approved{color:var(--ok);background:var(--ok-soft);border-color:rgba(70,209,138,.3)}
 .pstatus.pending{color:var(--warn);background:var(--warn-soft);border-color:rgba(240,180,58,.35)}
 .pstatus.rejected{color:#ff8f86;background:var(--red-soft);border-color:rgba(226,59,46,.4)}
+
+
+/* ---- coin packs ---- */
+.bonus-coins{display:flex;align-items:center;gap:7px;margin:8px 0 2px;font-size:14px;color:var(--muted)}
+.bonus-coins b{color:var(--coin)}
+.bonus-coins small{color:var(--faint);font-size:12px}
+.buy-link{margin-left:6px;font-weight:700;color:var(--text);text-decoration:underline;text-underline-offset:3px}

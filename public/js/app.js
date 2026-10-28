@@ -95,7 +95,7 @@ function walletHTML(b) {
   } else {
     planTitle = 'Daily coins';
     planSub = `Your bot costs <b>${c.botCoinCost} coins</b> ${c.botPeriodDays === 1 ? 'per day' : 'per ' + c.botPeriodDays + ' days'}. Claim ${c.claimCoins} free coins every day to keep it online, or subscribe for $${c.priceUsd}/month.`;
-    pct = Math.min(100, (b.coins / c.botCoinCost) * 100); tone = b.coins >= c.botCoinCost ? 'ok' : 'warn';
+    pct = Math.min(100, ((b.totalCoins || b.coins) / c.botCoinCost) * 100); tone = (b.totalCoins || b.coins) >= c.botCoinCost ? 'ok' : 'warn';
   }
   const claimBtn = b.canClaim
     ? `<button class="btn btn-primary btn-claim" id="claimBtn">Claim ${c.claimCoins} free coins</button>`
@@ -103,7 +103,7 @@ function walletHTML(b) {
   const sub = b.mode === 'subscription' || b.mode === 'admin' ? '' : (c.paymentUrl
     ? `<a class="btn" href="${esc(c.paymentUrl)}${c.paymentUrl.includes('?') ? '&' : '?'}client_reference_id=${encodeURIComponent(state.user.username)}" target="_blank" rel="noopener">Subscribe for $${c.priceUsd}/month</a>`
     : `<button class="btn" id="subBtn">Subscribe for $${c.priceUsd}/month${b.zigPerUsd ? ` <span class="zig-inline">(${zigFmt(c.priceUsd, b.zigPerUsd)})</span>` : ''}</button>`);
-  const payRow = `<div class="pay-row"><a class="btn btn-sm" href="#/pay">Payment details &amp; ZiG prices</a><a class="btn btn-sm btn-ghost" href="#/support">Contact admin</a></div>`;
+  const payRow = `<div class="pay-row"><a class="btn btn-sm btn-primary" href="#/pay?buy=coins100">Buy coins</a><a class="btn btn-sm" href="#/pay">Payment details &amp; ZiG prices</a><a class="btn btn-sm btn-ghost" href="#/support">Contact admin</a></div>`;
 
   // Auto-claim add-on ($2/month) — the server claims the daily coins for you.
   const ac = b.autoClaim || {};
@@ -165,6 +165,7 @@ function walletHTML(b) {
     <div class="wallet-coins">
       <div class="k">Coins</div>
       <div class="coin-big"><i class="coin-dot"></i>${b.coins}<small>of ${c.maxCoins} max</small></div>
+      ${b.bonusCoins ? `<div class="bonus-coins"><i class="coin-dot"></i><b>+${b.bonusCoins}</b> bought coins <small>never capped, used after your free coins</small></div>` : ''}
       <div class="wallet-actions">${claimBtn}${sub}</div>
       ${autoClaim}
       ${slots}
@@ -218,7 +219,7 @@ async function loadWallet() {
 
 function renderNavCoins() {
   const n = $('#navCoinsN');
-  if (n && state.billing) n.textContent = state.billing.coins;
+  if (n && state.billing) n.textContent = state.billing.totalCoins != null ? state.billing.totalCoins : state.billing.coins;
 }
 
 // live countdowns
@@ -269,7 +270,7 @@ async function navigate() {
 function renderNav() {
   const el = $('#navLinks');
   if (state.user) {
-    const coins = state.billing ? state.billing.coins : state.user.coins || 0;
+    const coins = state.billing ? (state.billing.totalCoins != null ? state.billing.totalCoins : state.billing.coins) : state.user.coins || 0;
     el.innerHTML = `
       <a href="#/dashboard" class="nav-link hide-sm">Dashboard</a>
       <a href="#/pay" class="nav-link hide-sm">Pay</a>
@@ -579,6 +580,14 @@ async function renderLanding() {
           <ul><li>+1 bot slot per purchase — stack as many as you need</li><li>Works on any plan, including the free trial</li><li>Cancel by simply not renewing</li></ul>
           <a href="#/register" class="btn btn-block">Start free trial</a>
         </div>
+        <div class="plan reveal">
+          <div class="plan-name">Coin packs <span class="plan-tag addon">Top-up</span></div>
+          <div class="plan-price">$1<small>for 100 coins</small></div>
+          <div class="plan-zig" data-zig="1" data-zig-suffix=""></div>
+          <p class="plan-desc">Ran out of coins? Buy more and your bot is back online right away.</p>
+          <ul><li>100 coins = 5 days for one bot</li><li>Need more? 300 coins for $2.50</li><li>Bought coins never hit the 140 cap and never expire</li></ul>
+          <a href="#/register" class="btn btn-block">Start free trial</a>
+        </div>
       </div>
     </div>
   </section>
@@ -591,6 +600,7 @@ async function renderLanding() {
         <details><summary>What if I forget to claim?</summary><p>If your balance cannot cover the next day, the bot pauses and shows a notice on your dashboard. Claim your coins and press Start to bring it back. Your settings and session stay saved.</p></details>
         <details><summary>What is auto-claim?</summary><p>A $2/month add-on that claims your free coins for you. You still pay for hosting in coins, but you never have to remember the daily tap — so a busy day can't pause your bot. If you already pay for Unlimited, auto-claim is pointless and the dashboard will tell you so.</p></details>
         <details><summary>How do I run two bots?</summary><p>Each extra bot slot is $1/month and stacks on whatever plan you are on, including the free trial. Buy as many as you need from your dashboard — they all renew together and quietly expire if you stop paying, so there is nothing to cancel.</p></details>
+        <details><summary>Can I buy more coins?</summary><p>Yes. Coin packs start at $1 for 100 coins (5 days of hosting for one bot). Bought coins never expire, are not limited by the 140-coin cap, and are only spent after your free daily coins run out.</p></details>
         <details><summary>Can I stack coins?</summary><p>Yes, up to 140. That is a week of hosting if you want to claim less often.</p></details>
         <details><summary>How do I pay the $${price} a month?</summary><p>Pay in USD or ZiG by bank transfer to the NSB accounts listed on the Pay page once you are signed in, then message the admin from your dashboard with your proof of payment. Once your payment is confirmed, your account switches to Unlimited.</p></details>
         <details><summary>Is it safe to use with my WhatsApp?</summary><p>The bot runs as a linked device, like WhatsApp Web. Your chats stay on WhatsApp and session IDs are never shown publicly. Still follow WhatsApp's rules: don't spam groups or blast random numbers.</p></details>
@@ -625,7 +635,7 @@ async function renderLanding() {
 function initLanding() {
   // ZiG prices (rate is set by the admin)
   api('/api/prices').then((p) => {
-    $$('[data-zig]').forEach((el) => { el.textContent = `or ${zigFmt(parseFloat(el.dataset.zig), p.zigPerUsd)} per month`; });
+    $$('[data-zig]').forEach((el) => { el.textContent = `or ${zigFmt(parseFloat(el.dataset.zig), p.zigPerUsd)}${el.hasAttribute('data-zig-suffix') ? ' for 100 coins' : ' per month'}`; });
   }).catch(() => {});
   // scroll reveal
   const items = $$('.reveal');
@@ -850,7 +860,7 @@ function botCard(b) {
       ${b.pid && live ? `<span class="chip">PID ${b.pid}</span>` : ''}
     </div>
     ${cover}
-    ${b.suspendedReason && !b.running ? `<div class="suspended">${esc(b.suspendedReason)}</div>` : ''}
+    ${b.suspendedReason && !b.running ? `<div class="suspended">${esc(b.suspendedReason)}${/coins/i.test(b.suspendedReason) ? ' <a class="buy-link" href="#/pay?buy=coins100">Buy coins</a>' : ''}</div>` : ''}
     ${b.lastError ? `<div class="suspended is-err">${esc(b.lastError)}</div>` : ''}
     <div class="bot-actions">
       ${live
@@ -1514,7 +1524,7 @@ async function renderPay() {
         <p class="pay-note" style="margin:0 0 14px">Sent the money? Tell us what it was for. The admin checks the transfer and switches your plan on.</p>
         <div class="field"><label>What did you pay for?</label>
           <select class="input" id="fItem">${p.items.map((i) => `<option value="${i.key}">${esc(i.name)} - $${i.usd} / ZiG ${i.zig.toFixed(2)}</option>`).join('')}</select></div>
-        <div class="field" id="fQtyWrap" style="display:none"><label>How many slots?</label>
+        <div class="field" id="fQtyWrap" style="display:none"><label id="fQtyLabel">How many?</label>
           <input class="input" id="fQty" type="number" min="1" max="5" value="1" /></div>
         <div class="field"><label>Currency you paid in</label>
           <select class="input" id="fCur">${p.accounts.map((a) => `<option value="${esc(a.currency)}">${esc(a.currency)}</option>`).join('')}</select></div>
@@ -1532,12 +1542,16 @@ async function renderPay() {
   const items = p.items;
   const total = () => {
     const it = items.find((i) => i.key === $('#fItem').value);
-    const qty = it.key === 'slot' ? Math.max(1, Math.min(5, parseInt($('#fQty').value, 10) || 1)) : 1;
-    $('#fQtyWrap').style.display = it.key === 'slot' ? '' : 'none';
+    const multi = it.key === 'slot' || it.coins;
+    const qty = multi ? Math.max(1, Math.min(5, parseInt($('#fQty').value, 10) || 1)) : 1;
+    $('#fQtyWrap').style.display = multi ? '' : 'none';
+    $('#fQtyLabel').textContent = it.coins ? `How many ${it.coins}-coin packs?` : 'How many slots?';
     const cur = $('#fCur').value;
     const amt = cur.toLowerCase() === 'zig' ? 'ZiG ' + (it.zig * qty).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '$' + it.usd * qty;
     $('#fTotal').innerHTML = `Amount to send: <b>${esc(amt)}</b>`;
   };
+  const want = (location.hash.split('buy=')[1] || '').split('&')[0];
+  if (want && items.some((i) => i.key === want)) $('#fItem').value = want;
   ['fItem', 'fQty', 'fCur'].forEach((id) => { $('#' + id).oninput = total; $('#' + id).onchange = total; });
   total();
   const loadMine = async () => {

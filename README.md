@@ -38,6 +38,7 @@ Built by **Ntandomods** · Deployable on **Render** in one click.
 - **ZiG prices**: ZiG = USD price x `zigPerUsd`. Default rate `26.57` (RBZ interbank, 27 Oct 2026); change it any time in **Admin -> Payments** or with `ZIG_PER_USD`. ZiG prices also appear on the public pricing section.
 - **Admin -> Payments**: edit bank name, account holder name, accounts, exchange rate and instructions (stored in the database, backed up with everything else). Env overrides for first boot: `PAYMENT_BANK`, `PAYMENT_ACCOUNT_NAME`, `PAYMENT_ZIG_ACCOUNT`, `PAYMENT_USD_ACCOUNT`, `PAYMENT_INSTRUCTIONS`.
 - **Contact admin (`#/support`)**: every user has a private thread with the admin (2000 chars/message, 5 messages/minute). Unread badge in the nav. The admin answers from **Admin -> Inbox**.
+- **Coin packs**: one-off top-ups (default 100 coins = $1, 300 coins = $2.50; override with `PACK_SMALL_COINS/USD`, `PACK_LARGE_COINS/USD`). Users submit "I have paid" on the Pay page, the admin approves in **Admin -> Payments**, and the coins land in `bonusCoins` (never capped by `MAX_COINS`, never expire, spent after the free daily coins).
 
 ## 🗄️ MongoDB backup (keeps data on Render free)
 

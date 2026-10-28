@@ -89,7 +89,7 @@ function publicUser(u) {
     billingMode: billing.mode(u),
     trialEndsAt: u.trialEndsAt || null,
     subscriptionUntil: u.subscriptionUntil || null,
-    coins: u.coins || 0,
+    coins: billing.totalCoins(u),
     autoClaimUntil: u.autoClaimUntil || null,
     extraSlots: billing.extraSlotCount(u),
     extraSlotsUntil: u.extraSlotsUntil || null,
@@ -446,7 +446,7 @@ app.delete('/api/admin/messages/:userId', requireAdmin, (req, res) => {
 // ---------------------------------------------------------------- payment submissions
 // A user reports a transfer ("I paid"); the admin approves it in one click and the
 // plan is switched on automatically, instead of hand-editing the user row.
-const PAY_ITEMS = ['unlimited', 'autoclaim', 'slot'];
+const PAY_ITEMS = ['unlimited', 'autoclaim', 'slot', ...billing.cfg.packs.map((p) => p.key)];
 
 function paymentView(x) {
   const u = db.findUserById(x.userId);
@@ -470,6 +470,10 @@ function applyPurchase(u, item, qty) {
     u.autoClaimRequestedAt = null;
     return `Auto-claim for ${billing.cfg.autoClaimDays} days`;
   }
+  if (billing.packByKey(item)) {
+    const added = billing.grantPack(u, item, qty);
+    return `${added} bought coins added`;
+  }
   billing.grantExtraSlots(u, qty, billing.cfg.slotDays);
   u.slotRequestedAt = null;
   u.slotRequestedCount = null;
@@ -489,7 +493,7 @@ app.post('/api/payments/submit', requireAuth, (req, res) => {
   const b = req.body || {};
   const item = String(b.item || '');
   if (!PAY_ITEMS.includes(item)) return res.status(400).json({ error: 'Choose what you paid for.' });
-  const qty = item === 'slot' ? Math.max(1, Math.min(5, parseInt(b.qty, 10) || 1)) : 1;
+  const qty = item === 'slot' || billing.packByKey(item) ? Math.max(1, Math.min(5, parseInt(b.qty, 10) || 1)) : 1;
   const cfgPay = payments.get();
   const currency = cfgPay.accounts.map((a) => a.currency).find((c) => c.toLowerCase() === String(b.currency || '').toLowerCase());
   if (!currency) return res.status(400).json({ error: 'Choose the currency you paid in.' });
@@ -953,7 +957,7 @@ function billingTick() {
     }
     console.log(`[billing] stopping "${bot.name}" (${owner.username}): out of coins`);
     bots.stop(bot.id);
-    db.updateBot(bot.id, { status: 'stopped', suspendedReason: 'Out of coins - claim daily coins or subscribe, then press Start.' });
+    db.updateBot(bot.id, { status: 'stopped', suspendedReason: 'Out of coins - claim daily coins, buy a coin pack or subscribe, then press Start.' });
   }
 }
 setInterval(billingTick, 60 * 1000).unref();
